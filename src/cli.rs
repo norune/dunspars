@@ -1,6 +1,7 @@
 use std::error::Error;
 
 use clap::{Parser, Subcommand};
+use crate::pokemon::Pokemon;
 use crate::api::ApiWrapper;
 
 #[derive(Parser)]
@@ -28,12 +29,13 @@ pub async fn run() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-async fn view(pokemon: &str) -> Result<(), Box<dyn Error>> {
-    let api_client = ApiWrapper::default();
-    let pokemon = api_client.get_pokemon(pokemon).await?;
-    let type_charts = api_client.get_type_charts(&pokemon.types.0, pokemon.types.1.as_deref()).await?;
-    println!("name: {0}, types: {1} {2}", pokemon.name, pokemon.types.0, pokemon.types.1.unwrap_or("".to_string()));
-    println!("defense chart: {:#?}", type_charts.1);
+async fn view(name: &str) -> Result<(), Box<dyn Error>> {
+    let api = ApiWrapper::default();
+    let pokemon = Pokemon::from_name(&api, name).await?;
+    let defense_chart = pokemon.get_defense_chart().await?;
+
+    println!("name: {0}, types: {1} {2}", pokemon.name, pokemon.primary_type, pokemon.secondary_type.unwrap_or("".to_string()));
+    println!("defense chart: {:#?}", defense_chart);
 
     Ok(())
 }
