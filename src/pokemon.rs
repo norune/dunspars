@@ -1,5 +1,6 @@
 use std::error::Error;
 use std::collections::HashMap;
+use std::{fmt, vec};
 
 use crate::api::ApiWrapper;
 
@@ -57,5 +58,27 @@ impl TypeChart {
         }
 
         TypeChart(new_chart)
+    }
+}
+
+impl fmt::Display for TypeChart {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut zero = vec![];
+        let mut half = vec![];
+        let mut double = vec![];
+        let mut quad = vec![];
+
+        for (type_, multiplier) in &self.0 {
+            match multiplier {
+                x if *x == 0.0 => zero.push(type_.clone()),
+                x if *x == 0.5 => half.push(type_.clone()),
+                x if *x == 2.0 => double.push(type_.clone()),
+                x if *x == 4.0 => quad.push(type_.clone()),
+                _ => ()
+            }
+        }
+        
+        write!(f, "quad: {0}\ndouble: {1}\nhalf: {2}\nzero: {3}\n",
+            quad.join(" "), double.join(" "), half.join(" "), zero.join(" "))
     }
 }
