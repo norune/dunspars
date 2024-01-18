@@ -1,6 +1,7 @@
-use std::error::Error;
 use std::collections::HashMap;
 use std::{fmt, vec};
+
+use anyhow::Result;
 
 use crate::api::ApiWrapper;
 
@@ -12,7 +13,7 @@ pub struct Pokemon<'a> {
 }
 
 impl<'a> Pokemon<'a> {
-    pub async fn from_name(api: &'a ApiWrapper, name: &str) -> Result<Self, Box<dyn Error>> {
+    pub async fn from_name(api: &'a ApiWrapper, name: &str) -> Result<Self> {
         let pokemon = api.get_pokemon(name).await?;
 
         Ok(Pokemon {
@@ -23,25 +24,69 @@ impl<'a> Pokemon<'a> {
         })
     }
 
-    pub async fn get_defense_chart(&self) -> Result<TypeChart, Box<dyn Error>> {
-        let primary_type = self.api.get_type(&self.primary_type).await?;
-        let primary_chart = TypeChart(primary_type.defensive_chart);
+    pub async fn get_defense_chart(&self) -> Result<TypeChart> {
+        let primary_type = Type::from_name(self.api, &self.primary_type).await?;
 
-        if let Some(type_) = &self.secondary_type {
-            let secondary_type = self.api.get_type(&type_).await?;
-            let secondary_chart = TypeChart(secondary_type.defensive_chart);
+        if let Some(secondary_type) = &self.secondary_type {
+            let secondary_type = Type::from_name(self.api, secondary_type).await?;
 
-            Ok(primary_chart.combine(&secondary_chart))
+            Ok(primary_type.defense_chart.combine(&secondary_type.defense_chart))
         } else {
-            Ok(primary_chart)
+            Ok(primary_type.defense_chart)
         }
+    }
+}
+
+pub struct Type<'a> {
+    pub name: String,
+    pub offense_chart: TypeChart,
+    pub defense_chart: TypeChart,
+    #[allow(dead_code)]
+    api: &'a ApiWrapper,
+}
+
+impl<'a> Type<'a> {
+    pub async fn from_name(api: &'a ApiWrapper, name: &str) -> Result<Self> {
+        let type_ = api.get_type(name).await?;
+        let offense_chart = TypeChart::from_hashmap(type_.offense_chart);
+        let defense_chart = TypeChart::from_hashmap(type_.defense_chart);
+
+        Ok(Type {
+            name: type_.name,
+            offense_chart,
+            defense_chart,
+            api
+        })
     }
 }
 
 #[derive(Debug)]
 pub struct TypeChart(HashMap<String, f32>);
 
+impl Default for TypeChart {
+    fn default() -> TypeChart {
+        let mut chart = HashMap::new();
+        let types = vec![
+            "normal", "fighting", "fire", "fighting", "water",
+            "flying", "grass", "poison", "electric", "ground",
+            "psychic", "rock", "ice", "bug", "dragon", "ghost",
+            "dark", "steel", "fairy"
+        ];
+
+        for type_ in types {
+            chart.insert(type_.to_string(), 1.0f32);
+        }
+
+        TypeChart(chart)
+    }
+}
+
 impl TypeChart {
+    pub fn from_hashmap(hashmap: HashMap<String, f32>) -> TypeChart {
+        let chart = TypeChart::default();
+        chart.combine(&TypeChart(hashmap))
+    }
+
     fn combine(&self, chart: &TypeChart) -> TypeChart {
         let mut new_chart = HashMap::new();
 
@@ -63,22 +108,39 @@ impl TypeChart {
 
 impl fmt::Display for TypeChart {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut zero = vec![];
-        let mut half = vec![];
-        let mut double = vec![];
         let mut quad = vec![];
+        let mut double = vec![];
+        let mut neutral = vec![];
+        let mut half = vec![];
+        let mut zero = vec![];
 
         for (type_, multiplier) in &self.0 {
             match multiplier {
-                x if *x == 0.0 => zero.push(type_.clone()),
-                x if *x == 0.5 => half.push(type_.clone()),
-                x if *x == 2.0 => double.push(type_.clone()),
                 x if *x == 4.0 => quad.push(type_.clone()),
+                x if *x == 2.0 => double.push(type_.clone()),
+                x if *x == 1.0 => neutral.push(type_.clone()),
+                x if *x == 0.5 => half.push(type_.clone()),
+                x if *x == 0.0 => zero.push(type_.clone()),
                 _ => ()
             }
         }
         
-        write!(f, "quad: {0}\ndouble: {1}\nhalf: {2}\nzero: {3}\n",
-            quad.join(" "), double.join(" "), half.join(" "), zero.join(" "))
+        if quad.len() > 0 {
+            writeln!(f, "quad: {}", quad.join(" "))?;
+        }
+        if double.len() > 0 {
+            writeln!(f, "double: {}", double.join(" "))?;
+        }
+        if neutral.len() > 0 {
+            writeln!(f, "neutral: {}", neutral.join(" "))?;
+        }
+        if half.len() > 0 {
+            writeln!(f, "half: {}", half.join(" "))?;
+        }
+        if zero.len() > 0 {
+            writeln!(f, "zero: {}", zero.join(" "))?;
+        }
+
+        Ok(())
     }
 }

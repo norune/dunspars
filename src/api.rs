@@ -1,8 +1,7 @@
-use std::error::Error;
 use std::collections::HashMap;
 
+use anyhow::Result;
 use rustemon::client::RustemonClient;
-use rustemon::error::Error as RustemonError;
 use rustemon::pokemon::{pokemon as rustemon_pokemon, type_ as rustemon_type};
 
 pub struct ApiWrapper {
@@ -17,7 +16,7 @@ impl Default for ApiWrapper {
     }
 }
 impl ApiWrapper {
-    pub async fn get_pokemon(&self, pokemon: &str) -> Result<GetPokemonResult, RustemonError> {
+    pub async fn get_pokemon(&self, pokemon: &str) -> Result<GetPokemonResult> {
         let pokemon = rustemon_pokemon::get_by_name(&pokemon, &self.client).await?;
         let name = pokemon.name;
 
@@ -35,22 +34,23 @@ impl ApiWrapper {
         })
     }
 
-    pub async fn get_type(&self, type_str: &str) -> Result<GetTypeResult, Box<dyn Error>> {
+    pub async fn get_type(&self, type_str: &str) -> Result<GetTypeResult> {
         let type_ = rustemon_type::get_by_name(type_str, &self.client).await?;
-        let mut offensive_chart = HashMap::new();
-        let mut defensive_chart = HashMap::new();
+        let mut offense_chart = HashMap::new();
+        let mut defense_chart = HashMap::new();
 
-        type_.damage_relations.no_damage_to.iter().for_each(|t| { offensive_chart.insert(t.name.to_string(), 0.0); });
-        type_.damage_relations.half_damage_to.iter().for_each(|t| { offensive_chart.insert(t.name.to_string(), 0.5); });
-        type_.damage_relations.double_damage_to.iter().for_each(|t| { offensive_chart.insert(t.name.to_string(), 2.0); });
+        type_.damage_relations.no_damage_to.iter().for_each(|t| { offense_chart.insert(t.name.to_string(), 0.0); });
+        type_.damage_relations.half_damage_to.iter().for_each(|t| { offense_chart.insert(t.name.to_string(), 0.5); });
+        type_.damage_relations.double_damage_to.iter().for_each(|t| { offense_chart.insert(t.name.to_string(), 2.0); });
 
-        type_.damage_relations.no_damage_from.iter().for_each(|t| { defensive_chart.insert(t.name.to_string(), 0.0); });
-        type_.damage_relations.half_damage_from.iter().for_each(|t| { defensive_chart.insert(t.name.to_string(), 0.5); });
-        type_.damage_relations.double_damage_from.iter().for_each(|t| { defensive_chart.insert(t.name.to_string(), 2.0); });
+        type_.damage_relations.no_damage_from.iter().for_each(|t| { defense_chart.insert(t.name.to_string(), 0.0); });
+        type_.damage_relations.half_damage_from.iter().for_each(|t| { defense_chart.insert(t.name.to_string(), 0.5); });
+        type_.damage_relations.double_damage_from.iter().for_each(|t| { defense_chart.insert(t.name.to_string(), 2.0); });
 
         Ok(GetTypeResult {
-            offensive_chart,
-            defensive_chart
+            name: type_.name,
+            offense_chart,
+            defense_chart
         })
     }
 }
@@ -62,6 +62,7 @@ pub struct GetPokemonResult {
 }
 
 pub struct GetTypeResult {
-    pub offensive_chart: HashMap<String, f32>,
-    pub defensive_chart: HashMap<String, f32>
+    pub name: String,
+    pub offense_chart: HashMap<String, f32>,
+    pub defense_chart: HashMap<String, f32>
 }
