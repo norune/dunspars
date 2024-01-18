@@ -1,9 +1,10 @@
-use anyhow::{Result, Ok};
+use anyhow::{Ok, Result};
 use clap::{Parser, Subcommand};
+use owo_colors::OwoColorize;
 
+use crate::api::ApiWrapper;
 use crate::pokemon::Pokemon;
 use crate::pokemon::Type;
-use crate::api::ApiWrapper;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -14,12 +15,8 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    Pokemon {
-        name: String
-    },
-    Type {
-        name: String
-    }
+    Pokemon { name: String },
+    Type { name: String },
 }
 
 pub async fn run() -> Result<()> {
@@ -39,18 +36,41 @@ async fn run_pokemon(name: &str) -> Result<()> {
     let pokemon = Pokemon::from_name(&api, name).await?;
     let defense_chart = pokemon.get_defense_chart().await?;
 
-    println!("pokemon\nname: {0}, types: {1} {2}", pokemon.name, pokemon.primary_type, pokemon.secondary_type.unwrap_or("".to_string()));
-    println!("\ndefense chart\n{}", defense_chart);
+    println!(
+        "{}\nname: {}, types: {} {}",
+        "pokemon".bright_green(),
+        pokemon.name,
+        pokemon.primary_type,
+        pokemon.secondary_type.unwrap_or("".to_string())
+    );
+
+    println!(
+        "\n{}\n{}",
+        "defense chart".bright_green(),
+        defense_chart.group_by_multiplier()
+    );
 
     Ok(())
 }
 
 async fn run_type(name: &str) -> Result<()> {
     let api = ApiWrapper::default();
-    let type_ = Type::from_name(&api, name).await?;
+    let Type {
+        offense_chart,
+        defense_chart,
+        ..
+    } = Type::from_name(&api, name).await?;
 
-    println!("offense chart\n{}\n", type_.offense_chart);
-    println!("defense chart\n{}\n", type_.defense_chart);
+    println!(
+        "{}\n{}\n",
+        "offense chart".bright_green(),
+        offense_chart.group_by_multiplier()
+    );
+    println!(
+        "{}\n{}\n",
+        "defense chart".bright_green(),
+        defense_chart.group_by_multiplier()
+    );
 
     Ok(())
 }

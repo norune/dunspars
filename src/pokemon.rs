@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::{fmt, vec};
 
 use anyhow::Result;
+use owo_colors::OwoColorize;
 
 use crate::api::ApiWrapper;
 
@@ -20,7 +21,7 @@ impl<'a> Pokemon<'a> {
             name: pokemon.name,
             primary_type: pokemon.primary_type,
             secondary_type: pokemon.secondary_type,
-            api
+            api,
         })
     }
 
@@ -30,7 +31,9 @@ impl<'a> Pokemon<'a> {
         if let Some(secondary_type) = &self.secondary_type {
             let secondary_type = Type::from_name(self.api, secondary_type).await?;
 
-            Ok(primary_type.defense_chart.combine(&secondary_type.defense_chart))
+            Ok(primary_type
+                .defense_chart
+                .combine(&secondary_type.defense_chart))
         } else {
             Ok(primary_type.defense_chart)
         }
@@ -55,7 +58,7 @@ impl<'a> Type<'a> {
             name: type_.name,
             offense_chart,
             defense_chart,
-            api
+            api,
         })
     }
 }
@@ -67,10 +70,9 @@ impl Default for TypeChart {
     fn default() -> TypeChart {
         let mut chart = HashMap::new();
         let types = vec![
-            "normal", "fighting", "fire", "fighting", "water",
-            "flying", "grass", "poison", "electric", "ground",
-            "psychic", "rock", "ice", "bug", "dragon", "ghost",
-            "dark", "steel", "fairy"
+            "normal", "fighting", "fire", "fighting", "water", "flying", "grass", "poison",
+            "electric", "ground", "psychic", "rock", "ice", "bug", "dragon", "ghost", "dark",
+            "steel", "fairy",
         ];
 
         for type_ in types {
@@ -104,15 +106,14 @@ impl TypeChart {
 
         TypeChart(new_chart)
     }
-}
 
-impl fmt::Display for TypeChart {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    pub fn group_by_multiplier(&self) -> TypeChartGrouped {
         let mut quad = vec![];
         let mut double = vec![];
         let mut neutral = vec![];
         let mut half = vec![];
         let mut zero = vec![];
+        let mut other = vec![];
 
         for (type_, multiplier) in &self.0 {
             match multiplier {
@@ -121,24 +122,47 @@ impl fmt::Display for TypeChart {
                 x if *x == 1.0 => neutral.push(type_.clone()),
                 x if *x == 0.5 => half.push(type_.clone()),
                 x if *x == 0.0 => zero.push(type_.clone()),
-                _ => ()
+                _ => other.push(type_.clone()),
             }
         }
-        
-        if quad.len() > 0 {
-            writeln!(f, "quad: {}", quad.join(" "))?;
+
+        TypeChartGrouped {
+            quad,
+            double,
+            neutral,
+            half,
+            zero,
+            other,
         }
-        if double.len() > 0 {
-            writeln!(f, "double: {}", double.join(" "))?;
+    }
+}
+
+pub struct TypeChartGrouped {
+    pub quad: Vec<String>,
+    pub double: Vec<String>,
+    pub neutral: Vec<String>,
+    pub half: Vec<String>,
+    pub zero: Vec<String>,
+    #[allow(dead_code)]
+    pub other: Vec<String>,
+}
+
+impl fmt::Display for TypeChartGrouped {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.quad.len() > 0 {
+            writeln!(f, "quad: {}", self.quad.join(" ").red())?;
         }
-        if neutral.len() > 0 {
-            writeln!(f, "neutral: {}", neutral.join(" "))?;
+        if self.double.len() > 0 {
+            writeln!(f, "double: {}", self.double.join(" ").bright_yellow())?;
         }
-        if half.len() > 0 {
-            writeln!(f, "half: {}", half.join(" "))?;
+        if self.neutral.len() > 0 {
+            writeln!(f, "neutral: {}", self.neutral.join(" "))?;
         }
-        if zero.len() > 0 {
-            writeln!(f, "zero: {}", zero.join(" "))?;
+        if self.half.len() > 0 {
+            writeln!(f, "half: {}", self.half.join(" ").bright_blue())?;
+        }
+        if self.zero.len() > 0 {
+            writeln!(f, "zero: {}", self.zero.join(" ").bright_purple())?;
         }
 
         Ok(())
