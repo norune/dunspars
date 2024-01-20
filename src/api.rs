@@ -31,22 +31,29 @@ impl ApiWrapper {
             None => None,
         };
 
-        let moves = pokemon
-            .moves
-            .iter()
-            .filter(|mv| {
-                mv.version_group_details
-                    .iter()
-                    .any(|vg| vg.version_group.name == version)
-            })
-            .map(|mv| mv.move_.name.clone())
-            .collect();
+        let mut moves = HashMap::new();
+        pokemon.moves.iter().for_each(|mv| {
+            let version_group = mv
+                .version_group_details
+                .iter()
+                .find(|vg| vg.version_group.name == version);
+            if let Some(vg) = version_group {
+                moves.insert(
+                    mv.move_.name.clone(),
+                    (
+                        vg.move_learn_method.name.clone(),
+                        vg.level_learned_at.clone(),
+                    ),
+                );
+            }
+        });
 
         Ok(Pokemon {
             name,
             primary_type,
             secondary_type,
             moves,
+            version: version.to_string(),
             api: self,
         })
     }
@@ -114,6 +121,8 @@ impl ApiWrapper {
             pp,
             damage_class: damage_class.name,
             type_: type_.name,
+            learn_method: None,
+            learn_level: None,
             api: self,
         })
     }

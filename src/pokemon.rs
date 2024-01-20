@@ -11,7 +11,8 @@ pub struct Pokemon<'a> {
     pub name: String,
     pub primary_type: String,
     pub secondary_type: Option<String>,
-    pub moves: Vec<String>,
+    pub moves: HashMap<String, (String, i64)>,
+    pub version: String,
     pub api: &'a ApiWrapper,
 }
 
@@ -25,13 +26,19 @@ impl<'a> Pokemon<'a> {
         let moves_futures = self
             .moves
             .iter()
-            .map(|mv| self.api.get_move(mv))
+            .map(|mv| self.api.get_move(&mv.0))
             .collect::<Vec<_>>();
         let moves_results = join_all(moves_futures).await;
 
         let mut moves = vec![];
-        for mv in moves_results {
-            moves.push(mv?);
+        for result in moves_results {
+            let mut move_ = result?;
+            let learn = self.moves.get(&move_.name);
+            if let Some(l) = learn {
+                move_.learn_method = Some(l.0.clone());
+                move_.learn_level = Some(l.1.clone());
+            }
+            moves.push(move_);
         }
 
         Ok(moves)
@@ -179,6 +186,8 @@ pub struct Move<'a> {
     pub pp: Option<i64>,
     pub damage_class: String,
     pub type_: String,
+    pub learn_method: Option<String>,
+    pub learn_level: Option<i64>,
     pub api: &'a ApiWrapper,
 }
 
@@ -191,18 +200,26 @@ impl<'a> fmt::Display for Move<'a> {
             pp,
             damage_class,
             type_,
+            learn_method,
+            learn_level,
             ..
         } = self;
 
-        let left = format!("{name} ({type_} {damage_class})");
-        let right = format!(
+        let prop = format!("{name:16} ({type_} {damage_class})");
+        let stats = format!(
             "power: {:3}  accuracy: {:3}  pp: {:2}",
             power.unwrap_or(0).red(),
             accuracy.unwrap_or(0).green(),
             pp.unwrap_or(0).blue()
         );
 
-        write!(f, "{left:40}{right}")?;
+        let learn = format!(
+            "{} {}",
+            learn_method.as_ref().unwrap_or(&String::from("unknown")),
+            learn_level.unwrap_or(0)
+        );
+
+        write!(f, "{prop:40}{stats:68}{learn}")?;
 
         Ok(())
     }
