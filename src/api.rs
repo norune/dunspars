@@ -2,7 +2,11 @@ use std::collections::HashMap;
 
 use anyhow::Result;
 use rustemon::client::RustemonClient;
+use rustemon::model::moves::Move as RustemonMove;
+use rustemon::moves as rustemon_moves;
 use rustemon::pokemon::{pokemon as rustemon_pokemon, type_ as rustemon_type};
+
+use crate::pokemon::{Move, Pokemon, Type, TypeChart};
 
 pub struct ApiWrapper {
     client: RustemonClient,
@@ -16,7 +20,7 @@ impl Default for ApiWrapper {
     }
 }
 impl ApiWrapper {
-    pub async fn get_pokemon(&self, pokemon: &str) -> Result<GetPokemonResult> {
+    pub async fn get_pokemon(&self, pokemon: &str, version: &str) -> Result<Pokemon> {
         let pokemon = rustemon_pokemon::get_by_name(&pokemon, &self.client).await?;
         let name = pokemon.name;
 
@@ -27,14 +31,27 @@ impl ApiWrapper {
             None => None,
         };
 
-        Ok(GetPokemonResult {
+        let moves = pokemon
+            .moves
+            .iter()
+            .filter(|mv| {
+                mv.version_group_details
+                    .iter()
+                    .any(|vg| vg.version_group.name == version)
+            })
+            .map(|mv| mv.move_.name.clone())
+            .collect();
+
+        Ok(Pokemon {
             name,
             primary_type,
             secondary_type,
+            moves,
+            api: self,
         })
     }
 
-    pub async fn get_type(&self, type_str: &str) -> Result<GetTypeResult> {
+    pub async fn get_type(&self, type_str: &str) -> Result<Type> {
         let type_ = rustemon_type::get_by_name(type_str, &self.client).await?;
         let mut offense_chart = HashMap::new();
         let mut defense_chart = HashMap::new();
@@ -71,22 +88,33 @@ impl ApiWrapper {
                 defense_chart.insert(t.name.to_string(), 2.0);
             });
 
-        Ok(GetTypeResult {
+        Ok(Type {
             name: type_.name,
-            offense_chart,
-            defense_chart,
+            offense_chart: TypeChart::from_hashmap(offense_chart),
+            defense_chart: TypeChart::from_hashmap(defense_chart),
+            api: self,
         })
     }
-}
 
-pub struct GetPokemonResult {
-    pub name: String,
-    pub primary_type: String,
-    pub secondary_type: Option<String>,
-}
+    pub async fn get_move(&self, name: &str) -> Result<Move> {
+        let RustemonMove {
+            name,
+            accuracy,
+            power,
+            pp,
+            damage_class,
+            type_,
+            ..
+        } = rustemon_moves::move_::get_by_name(name, &self.client).await?;
 
-pub struct GetTypeResult {
-    pub name: String,
-    pub offense_chart: HashMap<String, f32>,
-    pub defense_chart: HashMap<String, f32>,
+        Ok(Move {
+            name,
+            accuracy,
+            power,
+            pp,
+            damage_class: damage_class.name,
+            type_: type_.name,
+            api: self,
+        })
+    }
 }

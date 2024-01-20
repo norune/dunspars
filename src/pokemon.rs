@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::{fmt, vec};
 
 use anyhow::Result;
+use futures::future::join_all;
 use owo_colors::OwoColorize;
 
 use crate::api::ApiWrapper;
@@ -10,19 +11,30 @@ pub struct Pokemon<'a> {
     pub name: String,
     pub primary_type: String,
     pub secondary_type: Option<String>,
-    api: &'a ApiWrapper,
+    pub moves: Vec<String>,
+    pub api: &'a ApiWrapper,
 }
 
 impl<'a> Pokemon<'a> {
-    pub async fn from_name(api: &'a ApiWrapper, name: &str) -> Result<Self> {
-        let pokemon = api.get_pokemon(name).await?;
+    pub async fn from_name(api: &'a ApiWrapper, name: &str, version: &str) -> Result<Self> {
+        let pokemon = api.get_pokemon(name, version).await?;
+        Ok(pokemon)
+    }
 
-        Ok(Pokemon {
-            name: pokemon.name,
-            primary_type: pokemon.primary_type,
-            secondary_type: pokemon.secondary_type,
-            api,
-        })
+    pub async fn get_moves(&self) -> Result<Vec<Move>> {
+        let moves_futures = self
+            .moves
+            .iter()
+            .map(|mv| self.api.get_move(mv))
+            .collect::<Vec<_>>();
+        let moves_results = join_all(moves_futures).await;
+
+        let mut moves = vec![];
+        for mv in moves_results {
+            moves.push(mv?);
+        }
+
+        Ok(moves)
     }
 
     pub async fn get_defense_chart(&self) -> Result<TypeChart> {
@@ -44,22 +56,13 @@ pub struct Type<'a> {
     pub name: String,
     pub offense_chart: TypeChart,
     pub defense_chart: TypeChart,
-    #[allow(dead_code)]
-    api: &'a ApiWrapper,
+    pub api: &'a ApiWrapper,
 }
 
 impl<'a> Type<'a> {
     pub async fn from_name(api: &'a ApiWrapper, name: &str) -> Result<Self> {
         let type_ = api.get_type(name).await?;
-        let offense_chart = TypeChart::from_hashmap(type_.offense_chart);
-        let defense_chart = TypeChart::from_hashmap(type_.defense_chart);
-
-        Ok(Type {
-            name: type_.name,
-            offense_chart,
-            defense_chart,
-            api,
-        })
+        Ok(type_)
     }
 }
 
@@ -164,6 +167,42 @@ impl fmt::Display for TypeChartGrouped {
         if self.zero.len() > 0 {
             writeln!(f, "zero: {}", self.zero.join(" ").bright_purple())?;
         }
+
+        Ok(())
+    }
+}
+
+pub struct Move<'a> {
+    pub name: String,
+    pub accuracy: Option<i64>,
+    pub power: Option<i64>,
+    pub pp: Option<i64>,
+    pub damage_class: String,
+    pub type_: String,
+    pub api: &'a ApiWrapper,
+}
+
+impl<'a> fmt::Display for Move<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let Move {
+            name,
+            accuracy,
+            power,
+            pp,
+            damage_class,
+            type_,
+            ..
+        } = self;
+
+        let left = format!("{name} ({type_} {damage_class})");
+        let right = format!(
+            "power: {:3}  accuracy: {:3}  pp: {:2}",
+            power.unwrap_or(0).red(),
+            accuracy.unwrap_or(0).green(),
+            pp.unwrap_or(0).blue()
+        );
+
+        write!(f, "{left:40}{right}")?;
 
         Ok(())
     }
