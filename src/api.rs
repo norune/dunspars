@@ -121,8 +121,6 @@ impl ApiWrapper {
             pp,
             damage_class: damage_class.name,
             type_: type_.name,
-            learn_method: None,
-            learn_level: None,
             api: self,
         })
     }

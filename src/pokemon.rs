@@ -1,9 +1,7 @@
 use std::collections::HashMap;
-use std::{fmt, vec};
 
 use anyhow::Result;
 use futures::future::join_all;
-use owo_colors::OwoColorize;
 
 use crate::api::ApiWrapper;
 
@@ -22,7 +20,7 @@ impl<'a> Pokemon<'a> {
         Ok(pokemon)
     }
 
-    pub async fn get_moves(&self) -> Result<Vec<Move>> {
+    pub async fn get_moves(&self) -> Result<MoveList> {
         let moves_futures = self
             .moves
             .iter()
@@ -30,18 +28,13 @@ impl<'a> Pokemon<'a> {
             .collect::<Vec<_>>();
         let moves_results = join_all(moves_futures).await;
 
-        let mut moves = vec![];
+        let mut moves = HashMap::new();
         for result in moves_results {
-            let mut move_ = result?;
-            let learn = self.moves.get(&move_.name);
-            if let Some(l) = learn {
-                move_.learn_method = Some(l.0.clone());
-                move_.learn_level = Some(l.1.clone());
-            }
-            moves.push(move_);
+            let move_ = result?;
+            moves.insert(move_.name.clone(), move_);
         }
 
-        Ok(moves)
+        Ok(MoveList::from_hashmap(moves))
     }
 
     pub async fn get_defense_chart(&self) -> Result<TypeChart> {
@@ -56,6 +49,20 @@ impl<'a> Pokemon<'a> {
         } else {
             Ok(primary_type.defense_chart)
         }
+    }
+
+    pub async fn match_up(&self, opponent: &Pokemon<'_>) -> Result<()> {
+        // let self_defense_chart = self.get_defense_chart().await?;
+        // let opponent_moves = opponent.get_moves().await?;
+
+        // let weakness = WeaknessGroups::from_iter(&opponent_moves, |move_| {
+        //     let multiplier = self_defense_chart.get_multiplier(&move_.type_);
+        //     (move_.to_string(), multiplier)
+        // });
+
+        // println!("{weakness}");
+
+        Ok(())
     }
 }
 
@@ -74,7 +81,9 @@ impl<'a> Type<'a> {
 }
 
 #[derive(Debug)]
-pub struct TypeChart(HashMap<String, f32>);
+pub struct TypeChart {
+    value: HashMap<String, f32>,
+}
 
 impl Default for TypeChart {
     fn default() -> TypeChart {
@@ -89,24 +98,28 @@ impl Default for TypeChart {
             chart.insert(type_.to_string(), 1.0f32);
         }
 
-        TypeChart(chart)
+        TypeChart { value: chart }
     }
 }
 
 impl TypeChart {
     pub fn from_hashmap(hashmap: HashMap<String, f32>) -> TypeChart {
         let chart = TypeChart::default();
-        chart.combine(&TypeChart(hashmap))
+        chart.combine(&TypeChart { value: hashmap })
+    }
+
+    pub fn get_value(&self) -> &HashMap<String, f32> {
+        &self.value
     }
 
     fn combine(&self, chart: &TypeChart) -> TypeChart {
         let mut new_chart = HashMap::new();
 
-        for (type_, multiplier) in &self.0 {
+        for (type_, multiplier) in &self.value {
             new_chart.insert(type_.clone(), multiplier.clone());
         }
 
-        for (type_, multiplier) in &chart.0 {
+        for (type_, multiplier) in &chart.value {
             if let Some(new_multiplier) = new_chart.get(type_) {
                 new_chart.insert(type_.clone(), multiplier * new_multiplier);
             } else {
@@ -114,68 +127,11 @@ impl TypeChart {
             }
         }
 
-        TypeChart(new_chart)
+        TypeChart { value: new_chart }
     }
 
-    pub fn group_by_multiplier(&self) -> TypeChartGrouped {
-        let mut quad = vec![];
-        let mut double = vec![];
-        let mut neutral = vec![];
-        let mut half = vec![];
-        let mut zero = vec![];
-        let mut other = vec![];
-
-        for (type_, multiplier) in &self.0 {
-            match multiplier {
-                x if *x == 4.0 => quad.push(type_.clone()),
-                x if *x == 2.0 => double.push(type_.clone()),
-                x if *x == 1.0 => neutral.push(type_.clone()),
-                x if *x == 0.5 => half.push(type_.clone()),
-                x if *x == 0.0 => zero.push(type_.clone()),
-                _ => other.push(type_.clone()),
-            }
-        }
-
-        TypeChartGrouped {
-            quad,
-            double,
-            neutral,
-            half,
-            zero,
-            other,
-        }
-    }
-}
-
-pub struct TypeChartGrouped {
-    pub quad: Vec<String>,
-    pub double: Vec<String>,
-    pub neutral: Vec<String>,
-    pub half: Vec<String>,
-    pub zero: Vec<String>,
-    #[allow(dead_code)]
-    pub other: Vec<String>,
-}
-
-impl fmt::Display for TypeChartGrouped {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if self.quad.len() > 0 {
-            writeln!(f, "quad: {}", self.quad.join(" ").red())?;
-        }
-        if self.double.len() > 0 {
-            writeln!(f, "double: {}", self.double.join(" ").bright_yellow())?;
-        }
-        if self.neutral.len() > 0 {
-            writeln!(f, "neutral: {}", self.neutral.join(" "))?;
-        }
-        if self.half.len() > 0 {
-            writeln!(f, "half: {}", self.half.join(" ").bright_blue())?;
-        }
-        if self.zero.len() > 0 {
-            writeln!(f, "zero: {}", self.zero.join(" ").bright_purple())?;
-        }
-
-        Ok(())
+    fn get_multiplier(&self, type_: &str) -> f32 {
+        self.value.get(type_).unwrap().clone()
     }
 }
 
@@ -186,41 +142,19 @@ pub struct Move<'a> {
     pub pp: Option<i64>,
     pub damage_class: String,
     pub type_: String,
-    pub learn_method: Option<String>,
-    pub learn_level: Option<i64>,
     pub api: &'a ApiWrapper,
 }
 
-impl<'a> fmt::Display for Move<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let Move {
-            name,
-            accuracy,
-            power,
-            pp,
-            damage_class,
-            type_,
-            learn_method,
-            learn_level,
-            ..
-        } = self;
+pub struct MoveList<'a> {
+    value: HashMap<String, Move<'a>>,
+}
 
-        let prop = format!("{name:16} ({type_} {damage_class})");
-        let stats = format!(
-            "power: {:3}  accuracy: {:3}  pp: {:2}",
-            power.unwrap_or(0).red(),
-            accuracy.unwrap_or(0).green(),
-            pp.unwrap_or(0).blue()
-        );
+impl MoveList<'_> {
+    pub fn from_hashmap<'a>(hashmap: HashMap<String, Move<'a>>) -> MoveList<'a> {
+        MoveList { value: hashmap }
+    }
 
-        let learn = format!(
-            "{} {}",
-            learn_method.as_ref().unwrap_or(&String::from("unknown")),
-            learn_level.unwrap_or(0)
-        );
-
-        write!(f, "{prop:40}{stats:68}{learn}")?;
-
-        Ok(())
+    pub fn get_value(&self) -> &HashMap<String, Move<'_>> {
+        &self.value
     }
 }
