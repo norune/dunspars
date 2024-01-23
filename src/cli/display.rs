@@ -1,7 +1,7 @@
 use std::io::{stdout, Write};
 
 use anyhow::Result;
-use owo_colors::OwoColorize;
+use owo_colors::{OwoColorize, Style};
 
 use crate::pokemon::{Move, MoveList, Pokemon, TypeChart};
 
@@ -14,30 +14,148 @@ impl TypeChartDisplay<'_> {
         TypeChartDisplay { type_chart }
     }
 
-    pub fn print_by_weakness(&self) -> Result<()> {
-        let weakness_groups =
-            WeaknessDisplay::from_iter(self.type_chart.get_value(), |t| (t.0.clone(), t.1.clone()));
-        weakness_groups.print(" ", true)
+    pub fn print(&self) -> Result<()> {
+        let weakness_groups = WeaknessGroups::from_iter(self.type_chart.get_value(), |t| {
+            Some((t.0.clone(), t.1.clone()))
+        });
+        self.print_weakness_groups(weakness_groups)
+    }
+
+    fn print_weakness_groups(&self, weakness_groups: WeaknessGroups<String>) -> Result<()> {
+        let mut f = stdout().lock();
+
+        if weakness_groups.quad.len() > 0 {
+            let quad = weakness_groups.quad.join(" ");
+            writeln!(f, "quad:\n{}\n", quad.red())?;
+        }
+        if weakness_groups.double.len() > 0 {
+            let double = weakness_groups.double.join(" ");
+            writeln!(f, "double:\n{}\n", double.yellow())?;
+        }
+        if weakness_groups.neutral.len() > 0 {
+            let neutral = weakness_groups.neutral.join(" ");
+            writeln!(f, "neutral:\n{}\n", neutral.green())?;
+        }
+        if weakness_groups.half.len() > 0 {
+            let half = weakness_groups.half.join(" ");
+            writeln!(f, "half:\n{}\n", half.blue())?;
+        }
+        if weakness_groups.quarter.len() > 0 {
+            let quarter = weakness_groups.quarter.join(" ");
+            writeln!(f, "quarter:\n{}\n", quarter.bright_cyan())?;
+        }
+        if weakness_groups.zero.len() > 0 {
+            let zero = weakness_groups.zero.join(" ");
+            writeln!(f, "zero:\n{}\n", zero.purple())?;
+        }
+
+        Ok(())
     }
 }
 
-pub struct WeaknessDisplay {
-    pub quad: Vec<String>,
-    pub double: Vec<String>,
-    pub neutral: Vec<String>,
-    pub half: Vec<String>,
-    pub quarter: Vec<String>,
-    pub zero: Vec<String>,
-    pub other: Vec<String>,
+pub struct MoveWeakDisplay<'a, 'b, 'c> {
+    type_chart: &'a TypeChart,
+    move_list: &'b MoveList<'c>,
 }
 
-impl WeaknessDisplay {
-    pub fn from_iter<C, F, T>(collection: C, mut cb: F) -> Self
+impl MoveWeakDisplay<'_, '_, '_> {
+    pub fn new<'a, 'b, 'c>(
+        type_chart: &'a TypeChart,
+        move_list: &'b MoveList<'c>,
+    ) -> MoveWeakDisplay<'a, 'b, 'c> {
+        MoveWeakDisplay {
+            type_chart,
+            move_list,
+        }
+    }
+
+    pub fn print(&self) -> Result<()> {
+        let weakness_groups = WeaknessGroups::from_iter(self.move_list.get_value(), |move_| {
+            if move_.1.damage_class != "status" {
+                let multiplier = self.type_chart.get_multiplier(&move_.1.type_);
+                Some((move_.1, multiplier))
+            } else {
+                None
+            }
+        });
+        self.print_weakness_groups(weakness_groups)
+    }
+
+    fn print_weakness_groups(&self, weakness_groups: WeaknessGroups<&Move>) -> Result<()> {
+        let mut f = stdout().lock();
+
+        if weakness_groups.quad.len() > 0 {
+            let style = Style::new().red();
+            writeln!(f, "quad:")?;
+            self.print_group(weakness_groups.quad, style)?;
+            writeln!(f, "\n")?;
+        }
+        if weakness_groups.double.len() > 0 {
+            let style = Style::new().yellow();
+            writeln!(f, "double:")?;
+            self.print_group(weakness_groups.double, style)?;
+            writeln!(f, "\n")?;
+        }
+        if weakness_groups.neutral.len() > 0 {
+            let style = Style::new().green();
+            writeln!(f, "neutral:")?;
+            self.print_group(weakness_groups.neutral, style)?;
+            writeln!(f, "\n")?;
+        }
+        if weakness_groups.half.len() > 0 {
+            let style = Style::new().blue();
+            writeln!(f, "half:")?;
+            self.print_group(weakness_groups.half, style)?;
+            writeln!(f, "\n")?;
+        }
+        if weakness_groups.quarter.len() > 0 {
+            let style = Style::new().bright_cyan();
+            writeln!(f, "quarter:")?;
+            self.print_group(weakness_groups.quarter, style)?;
+            writeln!(f, "\n")?;
+        }
+        if weakness_groups.zero.len() > 0 {
+            let style = Style::new().purple();
+            writeln!(f, "zero:")?;
+            self.print_group(weakness_groups.zero, style)?;
+            writeln!(f, "\n")?;
+        }
+
+        Ok(())
+    }
+
+    fn print_group(&self, group: Vec<&Move>, style: Style) -> Result<()> {
+        let mut f = stdout().lock();
+        for move_ in group {
+            write!(
+                f,
+                "{} ({} {})  ",
+                move_.name.style(style),
+                move_.type_,
+                move_.damage_class
+            )?;
+        }
+        Ok(())
+    }
+}
+
+pub struct WeaknessGroups<T> {
+    pub quad: Vec<T>,
+    pub double: Vec<T>,
+    pub neutral: Vec<T>,
+    pub half: Vec<T>,
+    pub quarter: Vec<T>,
+    pub zero: Vec<T>,
+    pub other: Vec<T>,
+}
+
+impl<T> WeaknessGroups<T> {
+    pub fn from_iter<C, F, I>(collection: C, mut cb: F) -> Self
     where
-        C: IntoIterator<Item = T>,
-        F: FnMut(T) -> (String, f32),
+        C: IntoIterator<Item = I>,
+        F: FnMut(I) -> Option<(T, f32)>,
     {
-        let mut groups = WeaknessDisplay {
+        let mut groups = WeaknessGroups {
             quad: vec![],
             double: vec![],
             neutral: vec![],
@@ -47,69 +165,22 @@ impl WeaknessDisplay {
             other: vec![],
         };
 
-        for item in collection {
-            let (str, multiplier) = cb(item);
-            match multiplier {
-                x if x == 4.0 => groups.quad.push(str.clone()),
-                x if x == 2.0 => groups.double.push(str.clone()),
-                x if x == 1.0 => groups.neutral.push(str.clone()),
-                x if x == 0.5 => groups.half.push(str.clone()),
-                x if x == 0.25 => groups.quarter.push(str.clone()),
-                x if x == 0.0 => groups.zero.push(str.clone()),
-                _ => groups.other.push(str.clone()),
+        for element in collection {
+            if let Some(result) = cb(element) {
+                let (item, multiplier) = result;
+                match multiplier {
+                    x if x == 4.0 => groups.quad.push(item),
+                    x if x == 2.0 => groups.double.push(item),
+                    x if x == 1.0 => groups.neutral.push(item),
+                    x if x == 0.5 => groups.half.push(item),
+                    x if x == 0.25 => groups.quarter.push(item),
+                    x if x == 0.0 => groups.zero.push(item),
+                    _ => groups.other.push(item),
+                }
             }
         }
 
         groups
-    }
-
-    pub fn print(&self, separator: &str, default_colors: bool) -> Result<()> {
-        let mut f = stdout().lock();
-
-        if self.quad.len() > 0 {
-            let mut quad = self.quad.join(separator);
-            if default_colors {
-                quad = quad.red().to_string();
-            }
-            writeln!(f, "quad:\n{}\n", quad)?;
-        }
-        if self.double.len() > 0 {
-            let mut double = self.double.join(separator);
-            if default_colors {
-                double = double.yellow().to_string();
-            }
-            writeln!(f, "double:\n{}\n", double)?;
-        }
-        if self.neutral.len() > 0 {
-            let mut neutral = self.neutral.join(separator);
-            if default_colors {
-                neutral = neutral.white().to_string();
-            }
-            writeln!(f, "neutral:\n{}\n", neutral)?;
-        }
-        if self.half.len() > 0 {
-            let mut half = self.neutral.join(separator);
-            if default_colors {
-                half = half.blue().to_string();
-            }
-            writeln!(f, "half:\n{}\n", half)?;
-        }
-        if self.quarter.len() > 0 {
-            let mut quarter = self.quarter.join(separator);
-            if default_colors {
-                quarter = quarter.bright_cyan().to_string();
-            }
-            writeln!(f, "quarter:\n{}\n", quarter)?;
-        }
-        if self.zero.len() > 0 {
-            let mut zero = self.zero.join(separator);
-            if default_colors {
-                zero = zero.purple().to_string();
-            }
-            writeln!(f, "zero:\n{}\n", zero)?;
-        }
-
-        Ok(())
     }
 }
 
@@ -125,7 +196,8 @@ impl MoveListDisplay<'_, '_, '_> {
     ) -> MoveListDisplay<'a, 'b, 'c> {
         MoveListDisplay { move_list, pokemon }
     }
-    pub fn print_list(&self) -> Result<()> {
+
+    pub fn print(&self) -> Result<()> {
         let mut f = stdout().lock();
         for move_ in self.move_list.get_value() {
             let Move {

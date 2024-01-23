@@ -7,7 +7,7 @@ use owo_colors::OwoColorize;
 use crate::api::ApiWrapper;
 use crate::pokemon::Pokemon;
 use crate::pokemon::Type;
-use display::{MoveListDisplay, TypeChartDisplay};
+use display::{MoveListDisplay, MoveWeakDisplay, TypeChartDisplay};
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -60,12 +60,12 @@ async fn run_pokemon(name: String, version: Option<String>) -> Result<()> {
     let defense_chart = pokemon.get_defense_chart().await?;
     let type_chart_display = TypeChartDisplay::new(&defense_chart);
     println!("\n{}", "defense chart".bright_green().bold());
-    type_chart_display.print_by_weakness()?;
+    type_chart_display.print()?;
 
     let moves = pokemon.get_moves().await?;
     let move_list_display = MoveListDisplay::new(&moves, &pokemon);
     println!("\n{}", "moves".bright_green().bold());
-    move_list_display.print_list()?;
+    move_list_display.print()?;
 
     Ok(())
 }
@@ -82,9 +82,9 @@ async fn run_type(name: String) -> Result<()> {
     let defense_chart_display = TypeChartDisplay::new(&defense_chart);
 
     println!("\n{}\n", "offense chart".bright_green().bold());
-    offense_chart_display.print_by_weakness()?;
+    offense_chart_display.print()?;
     println!("\n{}\n", "defense chart".bright_green().bold());
-    defense_chart_display.print_by_weakness()?;
+    defense_chart_display.print()?;
 
     Ok(())
 }
@@ -95,7 +95,12 @@ async fn run_match(name1: String, name2: String) -> Result<()> {
     let pokemon1 = Pokemon::from_name(&api, &name1, &version).await?;
     let pokemon2 = Pokemon::from_name(&api, &name2, &version).await?;
 
-    pokemon1.match_up(&pokemon2).await?;
+    let defense_chart = pokemon1.get_defense_chart().await?;
+    let move_list = pokemon2.get_moves().await?;
+
+    let move_weak_display = MoveWeakDisplay::new(&defense_chart, &move_list);
+    println!("\n{}\n", "weaknesses by moves".bright_green().bold());
+    move_weak_display.print()?;
 
     Ok(())
 }

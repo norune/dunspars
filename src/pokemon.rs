@@ -50,20 +50,6 @@ impl<'a> Pokemon<'a> {
             Ok(primary_type.defense_chart)
         }
     }
-
-    pub async fn match_up(&self, opponent: &Pokemon<'_>) -> Result<()> {
-        // let self_defense_chart = self.get_defense_chart().await?;
-        // let opponent_moves = opponent.get_moves().await?;
-
-        // let weakness = WeaknessGroups::from_iter(&opponent_moves, |move_| {
-        //     let multiplier = self_defense_chart.get_multiplier(&move_.type_);
-        //     (move_.to_string(), multiplier)
-        // });
-
-        // println!("{weakness}");
-
-        Ok(())
-    }
 }
 
 pub struct Type<'a> {
@@ -112,6 +98,10 @@ impl TypeChart {
         &self.value
     }
 
+    pub fn get_multiplier(&self, type_: &str) -> f32 {
+        self.value.get(type_).unwrap().clone()
+    }
+
     fn combine(&self, chart: &TypeChart) -> TypeChart {
         let mut new_chart = HashMap::new();
 
@@ -128,10 +118,6 @@ impl TypeChart {
         }
 
         TypeChart { value: new_chart }
-    }
-
-    fn get_multiplier(&self, type_: &str) -> f32 {
-        self.value.get(type_).unwrap().clone()
     }
 }
 
