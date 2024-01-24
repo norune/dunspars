@@ -16,15 +16,14 @@ pub struct Pokemon<'a> {
 
 impl<'a> Pokemon<'a> {
     pub async fn from_name(api: &'a ApiWrapper, name: &str, version: &str) -> Result<Self> {
-        let pokemon = api.get_pokemon(name, version).await?;
-        Ok(pokemon)
+        api.get_pokemon(name, version).await
     }
 
     pub async fn get_moves(&self) -> Result<MoveList> {
         let moves_futures = self
             .moves
             .iter()
-            .map(|mv| self.api.get_move(&mv.0))
+            .map(|mv| Move::from_name(self.api, mv.0))
             .collect::<Vec<_>>();
         let moves_results = join_all(moves_futures).await;
 
@@ -61,8 +60,7 @@ pub struct Type<'a> {
 
 impl<'a> Type<'a> {
     pub async fn from_name(api: &'a ApiWrapper, name: &str) -> Result<Self> {
-        let type_ = api.get_type(name).await?;
-        Ok(type_)
+        api.get_type(name).await
     }
 }
 
@@ -129,6 +127,14 @@ pub struct Move<'a> {
     pub damage_class: String,
     pub type_: String,
     pub api: &'a ApiWrapper,
+    pub effect: String,
+    pub effect_short: String,
+}
+
+impl<'a> Move<'a> {
+    pub async fn from_name(api: &'a ApiWrapper, name: &str) -> Result<Self> {
+        api.get_move(&name).await
+    }
 }
 
 pub struct MoveList<'a> {

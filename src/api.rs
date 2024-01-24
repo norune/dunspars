@@ -111,8 +111,13 @@ impl ApiWrapper {
             pp,
             damage_class,
             type_,
+            effect_entries,
             ..
         } = rustemon_moves::move_::get_by_name(name, &self.client).await?;
+        let effect_entry = effect_entries
+            .into_iter()
+            .find(|e| e.language.name == "en")
+            .unwrap_or_default();
 
         Ok(Move {
             name,
@@ -121,6 +126,8 @@ impl ApiWrapper {
             pp,
             damage_class: damage_class.name,
             type_: type_.name,
+            effect: effect_entry.effect,
+            effect_short: effect_entry.short_effect,
             api: self,
         })
     }
