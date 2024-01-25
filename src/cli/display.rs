@@ -1,23 +1,60 @@
 use std::io::{stdout, Write};
 
 use anyhow::Result;
-use owo_colors::{OwoColorize, Style};
+use indoc::writedoc;
+use owo_colors::{colors::xterm, Style};
 
 use crate::pokemon::{Move, MoveList, Pokemon, TypeChart};
 
+pub struct StyleSheet {
+    pub header: Style,
+    pub quad: Style,
+    pub double: Style,
+    pub neutral: Style,
+    pub half: Style,
+    pub quarter: Style,
+    pub zero: Style,
+    pub power: Style,
+    pub accuracy: Style,
+    pub pp: Style,
+}
+
+impl Default for StyleSheet {
+    fn default() -> Self {
+        Self {
+            header: Style::new().bright_green().bold(),
+            quad: Style::new().red(),
+            double: Style::new().yellow(),
+            neutral: Style::new().green(),
+            half: Style::new().blue(),
+            quarter: Style::new().bright_cyan(),
+            zero: Style::new().purple(),
+            power: Style::new().fg::<xterm::FlushOrange>(),
+            accuracy: Style::new().fg::<xterm::FernGreen>(),
+            pp: Style::new().fg::<xterm::ScienceBlue>(),
+        }
+    }
+}
+
 pub struct TypeChartDisplay<'a> {
     type_chart: &'a TypeChart,
+    css: StyleSheet,
 }
 
 impl<'a> TypeChartDisplay<'a> {
     pub fn new(type_chart: &'a TypeChart) -> Self {
-        TypeChartDisplay { type_chart }
+        TypeChartDisplay {
+            type_chart,
+            css: StyleSheet::default(),
+        }
     }
 
     pub fn print(&self) -> Result<()> {
-        let weakness_groups = WeaknessGroups::from_iter(self.type_chart.get_value(), |t| {
+        let weakness_groups = WeaknessGroups::new(self.type_chart.get_value(), |t| {
             Some((t.0.clone(), t.1.clone()))
         });
+
+        println!("\n{}", self.css.header.style("defense chart"));
         self.print_weakness_groups(weakness_groups)
     }
 
@@ -26,55 +63,65 @@ impl<'a> TypeChartDisplay<'a> {
 
         if weakness_groups.quad.len() > 0 {
             let quad = weakness_groups.quad.join(" ");
-            writeln!(f, "quad:\n{}\n", quad.red())?;
+            writeln!(f, "quad:\n{}\n", self.css.quad.style(quad))?;
         }
         if weakness_groups.double.len() > 0 {
             let double = weakness_groups.double.join(" ");
-            writeln!(f, "double:\n{}\n", double.yellow())?;
+            writeln!(f, "double:\n{}\n", self.css.double.style(double))?;
         }
         if weakness_groups.neutral.len() > 0 {
             let neutral = weakness_groups.neutral.join(" ");
-            writeln!(f, "neutral:\n{}\n", neutral.green())?;
+            writeln!(f, "neutral:\n{}\n", self.css.neutral.style(neutral))?;
         }
         if weakness_groups.half.len() > 0 {
             let half = weakness_groups.half.join(" ");
-            writeln!(f, "half:\n{}\n", half.blue())?;
+            writeln!(f, "half:\n{}\n", self.css.half.style(half))?;
         }
         if weakness_groups.quarter.len() > 0 {
             let quarter = weakness_groups.quarter.join(" ");
-            writeln!(f, "quarter:\n{}\n", quarter.bright_cyan())?;
+            writeln!(f, "quarter:\n{}\n", self.css.quarter.style(quarter))?;
         }
         if weakness_groups.zero.len() > 0 {
             let zero = weakness_groups.zero.join(" ");
-            writeln!(f, "zero:\n{}\n", zero.purple())?;
+            writeln!(f, "zero:\n{}\n", self.css.zero.style(zero))?;
+        }
+        if weakness_groups.other.len() > 0 {
+            let other = weakness_groups.other.join(" ");
+            writeln!(f, "zero:\n{}\n", other)?;
         }
 
         Ok(())
     }
 }
 
-pub struct MoveWeakDisplay<'a, 'b, 'c, 'd> {
+pub struct MatchDisplay<'a, 'b, 'c, 'd> {
     type_chart: &'a TypeChart,
     move_list: &'b MoveList<'d>,
     attacker: &'c Pokemon<'d>,
+    stab_only: bool,
+    css: StyleSheet,
 }
 
-impl<'a, 'b, 'c, 'd> MoveWeakDisplay<'a, 'b, 'c, 'd> {
+impl<'a, 'b, 'c, 'd> MatchDisplay<'a, 'b, 'c, 'd> {
     pub fn new(
         type_chart: &'a TypeChart,
         move_list: &'b MoveList<'d>,
         attacker: &'c Pokemon<'d>,
+        stab_only: bool,
     ) -> Self {
-        MoveWeakDisplay {
+        MatchDisplay {
             type_chart,
             move_list,
             attacker,
+            stab_only,
+            css: StyleSheet::default(),
         }
     }
 
     pub fn print(&self) -> Result<()> {
-        let weakness_groups = WeaknessGroups::from_iter(self.move_list.get_value(), |move_| {
-            if move_.1.damage_class != "status" {
+        let weakness_groups = WeaknessGroups::new(self.move_list.get_value(), |move_| {
+            let stab_qualified = !self.stab_only || self.is_stab(&move_.1.type_);
+            if move_.1.damage_class != "status" && stab_qualified {
                 let multiplier = self.type_chart.get_multiplier(&move_.1.type_);
                 Some((move_.1, multiplier))
             } else {
@@ -88,40 +135,38 @@ impl<'a, 'b, 'c, 'd> MoveWeakDisplay<'a, 'b, 'c, 'd> {
         let mut f = stdout().lock();
 
         if weakness_groups.quad.len() > 0 {
-            let style = Style::new().red();
             write!(f, "quad: ")?;
-            self.print_group(weakness_groups.quad, style)?;
+            self.print_group(weakness_groups.quad, self.css.quad)?;
         }
         if weakness_groups.double.len() > 0 {
-            let style = Style::new().yellow();
             write!(f, "double: ")?;
-            self.print_group(weakness_groups.double, style)?;
+            self.print_group(weakness_groups.double, self.css.double)?;
         }
         if weakness_groups.neutral.len() > 0 {
-            let style = Style::new().green();
             write!(f, "neutral: ")?;
-            self.print_group(weakness_groups.neutral, style)?;
+            self.print_group(weakness_groups.neutral, self.css.neutral)?;
         }
         if weakness_groups.half.len() > 0 {
-            let style = Style::new().blue();
             write!(f, "half: ")?;
-            self.print_group(weakness_groups.half, style)?;
+            self.print_group(weakness_groups.half, self.css.half)?;
         }
         if weakness_groups.quarter.len() > 0 {
-            let style = Style::new().bright_cyan();
             write!(f, "quarter: ")?;
-            self.print_group(weakness_groups.quarter, style)?;
+            self.print_group(weakness_groups.quarter, self.css.quarter)?;
         }
         if weakness_groups.zero.len() > 0 {
-            let style = Style::new().purple();
             write!(f, "zero: ")?;
-            self.print_group(weakness_groups.zero, style)?;
+            self.print_group(weakness_groups.zero, self.css.zero)?;
+        }
+        if weakness_groups.other.len() > 0 {
+            write!(f, "other: ")?;
+            self.print_group(weakness_groups.other, self.css.neutral)?;
         }
 
         Ok(())
     }
 
-    fn print_group(&self, group: Vec<&Move>, style: Style) -> Result<()> {
+    fn print_group(&self, group: Vec<&Move>, group_style: Style) -> Result<()> {
         let mut f = stdout().lock();
         for move_ in group {
             let damage_class = match move_.damage_class.as_str() {
@@ -129,23 +174,26 @@ impl<'a, 'b, 'c, 'd> MoveWeakDisplay<'a, 'b, 'c, 'd> {
                 "physical" => "p",
                 _ => "?",
             };
-            let mut move_format = format!("{}({})", move_.name, damage_class);
-
-            let is_stab = if let Some(secondary_type) = &self.attacker.secondary_type {
-                move_.type_ == self.attacker.primary_type || &move_.type_ == secondary_type
+            let move_string = format!("{}({})", move_.name, damage_class);
+            let styled_move;
+            if self.is_stab(&move_.type_) {
+                styled_move = group_style.underline().style(move_string);
             } else {
-                move_.type_ == self.attacker.primary_type
-            };
-            if is_stab {
-                move_format = move_format.white().on_bright_black().to_string();
-            } else {
-                move_format = move_format.style(style).to_string();
+                styled_move = group_style.style(move_string);
             }
 
-            write!(f, "{} ", move_format)?;
+            write!(f, "{} ", styled_move)?;
         }
-        writeln!(f, "\n")?;
+        writeln!(f, "{}", "\n")?;
         Ok(())
+    }
+
+    fn is_stab(&self, type_: &str) -> bool {
+        if let Some(secondary_type) = &self.attacker.secondary_type {
+            type_ == self.attacker.primary_type || &type_ == secondary_type
+        } else {
+            type_ == self.attacker.primary_type
+        }
     }
 }
 
@@ -160,7 +208,7 @@ pub struct WeaknessGroups<T> {
 }
 
 impl<T> WeaknessGroups<T> {
-    pub fn from_iter<C, F, I>(collection: C, mut cb: F) -> Self
+    pub fn new<C, F, I>(collection: C, mut cb: F) -> Self
     where
         C: IntoIterator<Item = I>,
         F: FnMut(I) -> Option<(T, f32)>,
@@ -197,15 +245,23 @@ impl<T> WeaknessGroups<T> {
 pub struct MoveListDisplay<'a, 'b, 'c> {
     move_list: &'a MoveList<'c>,
     pokemon: &'b Pokemon<'c>,
+    css: StyleSheet,
 }
 
 impl<'a, 'b, 'c> MoveListDisplay<'a, 'b, 'c> {
     pub fn new(move_list: &'a MoveList<'c>, pokemon: &'b Pokemon<'c>) -> Self {
-        MoveListDisplay { move_list, pokemon }
+        MoveListDisplay {
+            move_list,
+            pokemon,
+            css: StyleSheet::default(),
+        }
     }
 
     pub fn print(&self) -> Result<()> {
         let mut f = stdout().lock();
+
+        println!("\n{}", self.css.header.style("moves"));
+
         for move_ in self.move_list.get_value() {
             let Move {
                 name,
@@ -220,9 +276,9 @@ impl<'a, 'b, 'c> MoveListDisplay<'a, 'b, 'c> {
             let prop = format!("{name:16} ({type_} {damage_class})");
             let stats = format!(
                 "power: {:3}  accuracy: {:3}  pp: {:2}",
-                power.unwrap_or(0).red(),
-                accuracy.unwrap_or(0).green(),
-                pp.unwrap_or(0).blue()
+                self.css.power.style(power.unwrap_or(0)),
+                self.css.accuracy.style(accuracy.unwrap_or(0)),
+                self.css.pp.style(pp.unwrap_or(0))
             );
 
             let default_learn = ("".to_string(), 0i64);
@@ -234,7 +290,7 @@ impl<'a, 'b, 'c> MoveListDisplay<'a, 'b, 'c> {
             };
             let learn = format!("{} {}", learn_method, learn_level);
 
-            writeln!(f, "{prop:40}{stats:68}{learn}")?;
+            writeln!(f, "{prop:40}{stats:80}{learn}")?;
         }
 
         Ok(())
@@ -243,26 +299,50 @@ impl<'a, 'b, 'c> MoveListDisplay<'a, 'b, 'c> {
 
 pub struct MoveDisplay<'a, 'b> {
     move_: &'a Move<'b>,
+    css: StyleSheet,
 }
 
 impl<'a, 'b> MoveDisplay<'a, 'b> {
     pub fn new(move_: &'a Move<'b>) -> Self {
-        MoveDisplay { move_ }
+        MoveDisplay {
+            move_,
+            css: StyleSheet::default(),
+        }
     }
 
     pub fn print(&self) -> Result<()> {
-        let mut f = stdout().lock();
+        let Move {
+            power,
+            accuracy,
+            pp,
+            name,
+            effect,
+            damage_class,
+            type_,
+            ..
+        } = self.move_;
+
         let stats = format!(
-            "power: {}  accuracy: {}  pp: {}",
-            self.move_.power.unwrap_or(0).red(),
-            self.move_.accuracy.unwrap_or(0).green(),
-            self.move_.pp.unwrap_or(0).blue()
+            "power: {:3}  accuracy: {:3}  pp: {:3}",
+            self.css.power.style(power.unwrap_or(0)),
+            self.css.accuracy.style(accuracy.unwrap_or(0)),
+            self.css.pp.style(pp.unwrap_or(0))
         );
-        writeln!(
+
+        let mut f = stdout().lock();
+        writedoc! {
             f,
-            "{} ({} {})\n{}\n{}",
-            self.move_.name, self.move_.type_, self.move_.damage_class, stats, self.move_.effect
-        )?;
+            "
+
+            {name}
+            {type_} {damage_class}
+            {stats}
+            {effect}
+
+            ",
+            name = self.css.header.style(name)
+        }?;
+
         Ok(())
     }
 }
