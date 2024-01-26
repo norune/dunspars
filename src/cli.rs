@@ -1,7 +1,9 @@
 mod display;
+mod utils;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use indoc::printdoc;
 
 use crate::api::ApiWrapper;
 use crate::pokemon::{Move, Pokemon, Type};
@@ -78,15 +80,22 @@ impl Program {
 
         let pokemon = Pokemon::from_name(&api, &name, &version).await?;
         let pokemon_display = PokemonDisplay::new(&pokemon);
-        pokemon_display.print()?;
 
         let defense_chart = pokemon.get_defense_chart().await?;
         let type_chart_display = TypeChartDisplay::new(&defense_chart, "defense chart");
-        type_chart_display.print()?;
 
         let moves = pokemon.get_moves().await?;
         let move_list_display = MoveListDisplay::new(&moves, &pokemon);
-        move_list_display.print()?;
+
+        printdoc! {
+            "
+            {pokemon_display}
+
+            {type_chart_display}
+
+            {move_list_display}
+            "
+        };
 
         Ok(())
     }
@@ -102,8 +111,13 @@ impl Program {
         let offense_chart_display = TypeChartDisplay::new(&offense_chart, "offense chart");
         let defense_chart_display = TypeChartDisplay::new(&defense_chart, "defense chart");
 
-        offense_chart_display.print()?;
-        defense_chart_display.print()?;
+        printdoc! {
+            "
+            {offense_chart_display}
+
+            {defense_chart_display}
+            "
+        };
 
         Ok(())
     }
@@ -117,9 +131,14 @@ impl Program {
         let defense_chart = defender.get_defense_chart().await?;
         let move_list = attacker.get_moves().await?;
 
-        let move_weak_display =
+        let match_display =
             MatchDisplay::new(&defense_chart, &move_list, &defender, &attacker, stab_only);
-        move_weak_display.print()?;
+
+        printdoc! {
+            "
+            {match_display}
+            "
+        };
 
         Ok(())
     }
@@ -127,8 +146,13 @@ impl Program {
     async fn run_move(&self, name: String) -> Result<()> {
         let api = ApiWrapper::default();
         let move_ = Move::from_name(&api, &name).await?;
-        let display = MoveDisplay::new(&move_);
-        display.print()?;
+        let move_display = MoveDisplay::new(&move_);
+
+        printdoc! {
+            "
+            {move_display}
+            "
+        };
 
         Ok(())
     }
