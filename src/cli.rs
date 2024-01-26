@@ -2,11 +2,10 @@ mod display;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use owo_colors::OwoColorize;
 
 use crate::api::ApiWrapper;
 use crate::pokemon::{Move, Pokemon, Type};
-use display::{MatchDisplay, MoveDisplay, MoveListDisplay, TypeChartDisplay};
+use display::*;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -76,17 +75,13 @@ impl Program {
     async fn run_pokemon(&self, name: String, version: Option<String>) -> Result<()> {
         let api = ApiWrapper::default();
         let version = version.unwrap_or("scarlet-violet".to_string());
+
         let pokemon = Pokemon::from_name(&api, &name, &version).await?;
-        println!(
-            "{}\nname: {}, types: {} {}",
-            "pokemon".bright_green().bold(),
-            pokemon.name,
-            pokemon.primary_type,
-            pokemon.secondary_type.as_ref().unwrap_or(&String::from(""))
-        );
+        let pokemon_display = PokemonDisplay::new(&pokemon);
+        pokemon_display.print()?;
 
         let defense_chart = pokemon.get_defense_chart().await?;
-        let type_chart_display = TypeChartDisplay::new(&defense_chart);
+        let type_chart_display = TypeChartDisplay::new(&defense_chart, "defense chart");
         type_chart_display.print()?;
 
         let moves = pokemon.get_moves().await?;
@@ -104,12 +99,10 @@ impl Program {
             ..
         } = Type::from_name(&api, &name).await?;
 
-        let offense_chart_display = TypeChartDisplay::new(&offense_chart);
-        let defense_chart_display = TypeChartDisplay::new(&defense_chart);
+        let offense_chart_display = TypeChartDisplay::new(&offense_chart, "offense chart");
+        let defense_chart_display = TypeChartDisplay::new(&defense_chart, "defense chart");
 
-        println!("\n{}", "offense chart".bright_green().bold());
         offense_chart_display.print()?;
-        println!("\n{}", "defense chart".bright_green().bold());
         defense_chart_display.print()?;
 
         Ok(())
@@ -124,8 +117,8 @@ impl Program {
         let defense_chart = defender.get_defense_chart().await?;
         let move_list = attacker.get_moves().await?;
 
-        let move_weak_display = MatchDisplay::new(&defense_chart, &move_list, &attacker, stab_only);
-        println!("\n{}", "weaknesses by moves".bright_green().bold());
+        let move_weak_display =
+            MatchDisplay::new(&defense_chart, &move_list, &defender, &attacker, stab_only);
         move_weak_display.print()?;
 
         Ok(())

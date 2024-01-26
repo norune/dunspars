@@ -1,44 +1,59 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
+use regex::Regex;
+
 use rustemon::client::RustemonClient;
-use rustemon::model::moves::Move as RustemonMove;
+use rustemon::games::version_group as rustemon_version;
 use rustemon::moves as rustemon_moves;
 use rustemon::pokemon::{pokemon as rustemon_pokemon, type_ as rustemon_type};
 
-use crate::pokemon::{Move, Pokemon, Type, TypeChart};
+use rustemon::model::games::VersionGroup as RustemonVersion;
+use rustemon::model::moves::Move as RustemonMove;
+use rustemon::model::pokemon::Pokemon as RustemonPokemon;
+use rustemon::model::pokemon::PokemonStat as RustemonStat;
+
+use crate::pokemon::{Move, Pokemon, Stats, Type, TypeChart};
 
 pub struct ApiWrapper {
     client: RustemonClient,
+    gen_url_regex: Regex,
 }
 
 impl Default for ApiWrapper {
     fn default() -> ApiWrapper {
         ApiWrapper {
             client: RustemonClient::default(),
+            gen_url_regex: Regex::new(r"generation/(?P<gen>\d+)/?$").unwrap(),
         }
     }
 }
 impl ApiWrapper {
     pub async fn get_pokemon(&self, pokemon: &str, version: &str) -> Result<Pokemon> {
-        let pokemon = rustemon_pokemon::get_by_name(&pokemon, &self.client).await?;
-        let name = pokemon.name;
+        let RustemonPokemon {
+            name,
+            types,
+            moves,
+            stats,
+            ..
+        } = rustemon_pokemon::get_by_name(&pokemon, &self.client).await?;
+        let generation = self.get_generation(version).await?;
 
-        let mut types = pokemon.types.iter();
+        let mut types = types.iter();
         let primary_type = types.find(|t| t.slot == 1).unwrap().type_.name.clone();
         let secondary_type = match types.find(|t| t.slot == 2) {
             Some(t) => Some(t.type_.name.clone()),
             None => None,
         };
 
-        let mut moves = HashMap::new();
-        pokemon.moves.iter().for_each(|mv| {
+        let mut moves_hashmap = HashMap::new();
+        moves.iter().for_each(|mv| {
             let version_group = mv
                 .version_group_details
                 .iter()
                 .find(|vg| vg.version_group.name == version);
             if let Some(vg) = version_group {
-                moves.insert(
+                moves_hashmap.insert(
                     mv.move_.name.clone(),
                     (
                         vg.move_learn_method.name.clone(),
@@ -52,8 +67,10 @@ impl ApiWrapper {
             name,
             primary_type,
             secondary_type,
-            moves,
+            moves: moves_hashmap,
+            stats: self.extract_stats(stats),
             version: version.to_string(),
+            generation,
             api: self,
         })
     }
@@ -130,5 +147,39 @@ impl ApiWrapper {
             effect_short: effect_entry.short_effect,
             api: self,
         })
+    }
+
+    pub async fn get_generation(&self, version: &str) -> Result<u8> {
+        let RustemonVersion { generation, .. } =
+            rustemon_version::get_by_name(version, &self.client).await?;
+
+        self.extract_gen_from_url(&generation.url)
+    }
+
+    fn extract_gen_from_url(&self, url: &str) -> Result<u8> {
+        let caps = self.gen_url_regex.captures(&url).unwrap();
+        let generation = caps["gen"].parse::<u8>()?;
+        Ok(generation)
+    }
+
+    fn extract_stats(&self, stats_vec: Vec<RustemonStat>) -> Stats {
+        let mut stats = Stats::default();
+
+        for RustemonStat {
+            stat, base_stat, ..
+        } in stats_vec
+        {
+            match stat.name.as_str() {
+                "hp" => stats.hp = base_stat,
+                "attack" => stats.attack = base_stat,
+                "defense" => stats.defense = base_stat,
+                "special-attack" => stats.special_attack = base_stat,
+                "special-defense" => stats.special_defense = base_stat,
+                "speed" => stats.speed = base_stat,
+                _ => (),
+            }
+        }
+
+        stats
     }
 }

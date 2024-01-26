@@ -11,6 +11,8 @@ pub struct Pokemon<'a> {
     pub secondary_type: Option<String>,
     pub moves: HashMap<String, (String, i64)>,
     pub version: String,
+    pub generation: u8,
+    pub stats: Stats,
     pub api: &'a ApiWrapper,
 }
 
@@ -61,6 +63,28 @@ pub struct Type<'a> {
 impl<'a> Type<'a> {
     pub async fn from_name(api: &'a ApiWrapper, name: &str) -> Result<Self> {
         api.get_type(name).await
+    }
+}
+
+pub struct Stats {
+    pub hp: i64,
+    pub attack: i64,
+    pub defense: i64,
+    pub special_attack: i64,
+    pub special_defense: i64,
+    pub speed: i64,
+}
+
+impl Default for Stats {
+    fn default() -> Self {
+        Self {
+            hp: 0,
+            attack: 0,
+            defense: 0,
+            special_attack: 0,
+            special_defense: 0,
+            speed: 0,
+        }
     }
 }
 
@@ -148,5 +172,13 @@ impl MoveList<'_> {
 
     pub fn get_value(&self) -> &HashMap<String, Move<'_>> {
         &self.value
+    }
+}
+
+pub fn is_stab(type_: &str, pokemon: &Pokemon) -> bool {
+    if let Some(secondary_type) = &pokemon.secondary_type {
+        type_ == pokemon.primary_type || &type_ == secondary_type
+    } else {
+        type_ == pokemon.primary_type
     }
 }
