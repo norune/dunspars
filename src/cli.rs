@@ -6,7 +6,7 @@ use clap::{Parser, Subcommand};
 use indoc::printdoc;
 
 use crate::api::ApiWrapper;
-use crate::pokemon::{Move, Pokemon, Type};
+use crate::pokemon::{Move, Pokemon, PokemonData, Type};
 use display::*;
 
 #[derive(Parser)]
@@ -14,22 +14,20 @@ use display::*;
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
+    #[arg(short, long)]
+    game: Option<String>,
 }
 
 #[derive(Subcommand)]
 enum Commands {
     Pokemon {
         name: String,
-        #[arg(short, long)]
-        version: Option<String>,
     },
     Match {
-        #[arg(short, long, action = clap::ArgAction::SetTrue)]
-        reverse: bool,
-        #[arg(short, long, action = clap::ArgAction::SetTrue)]
-        stab_only: bool,
         defender: String,
         attacker: String,
+        #[arg(short, long, action = clap::ArgAction::SetTrue)]
+        stab_only: bool,
     },
     Type {
         name: String,
@@ -40,45 +38,38 @@ enum Commands {
 }
 
 pub async fn run() -> Result<()> {
-    let program = Program::new();
     let cli = Cli::parse();
+    let version = cli.game.unwrap_or("scarlet-violet".to_string());
+    let program = Program::new(version);
 
     match cli.command {
-        Some(Commands::Pokemon { name, version }) => program.run_pokemon(name, version).await?,
+        Some(Commands::Pokemon { name }) => program.run_pokemon(name).await?,
         Some(Commands::Type { name }) => program.run_type(name).await?,
         Some(Commands::Move { name }) => program.run_move(name).await?,
         Some(Commands::Match {
-            attacker,
             defender,
-            reverse,
+            attacker,
             stab_only,
-        }) => {
-            let pokemon = if reverse {
-                (attacker, defender)
-            } else {
-                (defender, attacker)
-            };
-
-            program.run_match(pokemon.0, pokemon.1, stab_only).await?
-        }
+        }) => program.run_match(defender, attacker, stab_only).await?,
         None => {}
     }
 
     Ok(())
 }
 
-struct Program {}
+struct Program {
+    game: String,
+}
 
 impl Program {
-    pub fn new() -> Program {
-        Program {}
+    pub fn new(version: String) -> Self {
+        Self { game: version }
     }
 
-    async fn run_pokemon(&self, name: String, version: Option<String>) -> Result<()> {
+    async fn run_pokemon(&self, name: String) -> Result<()> {
         let api = ApiWrapper::default();
-        let version = version.unwrap_or("scarlet-violet".to_string());
 
-        let pokemon = Pokemon::from_name(&api, &name, &version).await?;
+        let pokemon = PokemonData::from_name(&api, &name, &self.game).await?;
         let pokemon_display = PokemonDisplay::new(&pokemon);
 
         let defense_chart = pokemon.get_defense_chart().await?;
@@ -124,15 +115,18 @@ impl Program {
 
     async fn run_match(&self, defender: String, attacker: String, stab_only: bool) -> Result<()> {
         let api = ApiWrapper::default();
-        let version = "scarlet-violet".to_string();
-        let defender = Pokemon::from_name(&api, &defender, &version).await?;
-        let attacker = Pokemon::from_name(&api, &attacker, &version).await?;
 
-        let defense_chart = defender.get_defense_chart().await?;
-        let move_list = attacker.get_moves().await?;
+        let defender_data = PokemonData::from_name(&api, &defender, &self.game).await?;
+        let defender_moves = defender_data.get_moves().await?;
+        let defender_chart = defender_data.get_defense_chart().await?;
+        let defender = Pokemon::new(defender_data, defender_chart, defender_moves);
 
-        let match_display =
-            MatchDisplay::new(&defense_chart, &move_list, &defender, &attacker, stab_only);
+        let attacker_data = PokemonData::from_name(&api, &attacker, &self.game).await?;
+        let attacker_moves = attacker_data.get_moves().await?;
+        let attacker_chart = attacker_data.get_defense_chart().await?;
+        let attacker = Pokemon::new(attacker_data, attacker_chart, attacker_moves);
+
+        let match_display = MatchDisplay::new(&defender, &attacker, stab_only);
 
         printdoc! {
             "

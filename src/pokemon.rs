@@ -6,24 +6,40 @@ use futures::future::join_all;
 use crate::api::ApiWrapper;
 
 pub struct Pokemon<'a> {
+    pub data: PokemonData<'a>,
+    pub defense_chart: TypeChart,
+    pub move_list: MoveList<'a>,
+}
+
+impl<'a> Pokemon<'a> {
+    pub fn new(data: PokemonData<'a>, defense_chart: TypeChart, move_list: MoveList<'a>) -> Self {
+        Self {
+            data,
+            defense_chart,
+            move_list,
+        }
+    }
+}
+
+pub struct PokemonData<'a> {
     pub name: String,
     pub primary_type: String,
     pub secondary_type: Option<String>,
-    pub moves: HashMap<String, (String, i64)>,
-    pub version: String,
+    pub learn_moves: HashMap<String, (String, i64)>,
+    pub game: String,
     pub generation: u8,
     pub stats: Stats,
     pub api: &'a ApiWrapper,
 }
 
-impl<'a> Pokemon<'a> {
-    pub async fn from_name(api: &'a ApiWrapper, name: &str, version: &str) -> Result<Self> {
-        api.get_pokemon(name, version).await
+impl<'a> PokemonData<'a> {
+    pub async fn from_name(api: &'a ApiWrapper, name: &str, game: &str) -> Result<Self> {
+        api.get_pokemon(name, game).await
     }
 
-    pub async fn get_moves(&self) -> Result<MoveList> {
+    pub async fn get_moves(&self) -> Result<MoveList<'a>> {
         let moves_futures = self
-            .moves
+            .learn_moves
             .iter()
             .map(|mv| Move::from_name(self.api, mv.0))
             .collect::<Vec<_>>();
@@ -35,7 +51,7 @@ impl<'a> Pokemon<'a> {
             moves.insert(move_.name.clone(), move_);
         }
 
-        Ok(MoveList::from_hashmap(moves))
+        Ok(MoveList::new(moves))
     }
 
     pub async fn get_defense_chart(&self) -> Result<TypeChart> {
@@ -111,7 +127,7 @@ impl Default for TypeChart {
 }
 
 impl TypeChart {
-    pub fn from_hashmap(hashmap: HashMap<String, f32>) -> TypeChart {
+    pub fn new(hashmap: HashMap<String, f32>) -> TypeChart {
         let chart = TypeChart::default();
         chart.combine(&TypeChart { value: hashmap })
     }
@@ -150,9 +166,9 @@ pub struct Move<'a> {
     pub pp: Option<i64>,
     pub damage_class: String,
     pub type_: String,
-    pub api: &'a ApiWrapper,
     pub effect: String,
     pub effect_short: String,
+    pub api: &'a ApiWrapper,
 }
 
 impl<'a> Move<'a> {
@@ -165,17 +181,17 @@ pub struct MoveList<'a> {
     value: HashMap<String, Move<'a>>,
 }
 
-impl MoveList<'_> {
-    pub fn from_hashmap<'a>(hashmap: HashMap<String, Move<'a>>) -> MoveList<'a> {
+impl<'a> MoveList<'a> {
+    pub fn new(hashmap: HashMap<String, Move<'a>>) -> MoveList<'a> {
         MoveList { value: hashmap }
     }
 
-    pub fn get_value(&self) -> &HashMap<String, Move<'_>> {
+    pub fn get_value(&self) -> &HashMap<String, Move<'a>> {
         &self.value
     }
 }
 
-pub fn is_stab(type_: &str, pokemon: &Pokemon) -> bool {
+pub fn is_stab(type_: &str, pokemon: &PokemonData) -> bool {
     if let Some(secondary_type) = &pokemon.secondary_type {
         type_ == pokemon.primary_type || &type_ == secondary_type
     } else {

@@ -13,7 +13,7 @@ use rustemon::model::moves::Move as RustemonMove;
 use rustemon::model::pokemon::Pokemon as RustemonPokemon;
 use rustemon::model::pokemon::PokemonStat as RustemonStat;
 
-use crate::pokemon::{Move, Pokemon, Stats, Type, TypeChart};
+use crate::pokemon::{Move, PokemonData, Stats, Type, TypeChart};
 
 pub struct ApiWrapper {
     client: RustemonClient,
@@ -29,7 +29,7 @@ impl Default for ApiWrapper {
     }
 }
 impl ApiWrapper {
-    pub async fn get_pokemon(&self, pokemon: &str, version: &str) -> Result<Pokemon> {
+    pub async fn get_pokemon(&self, pokemon: &str, version: &str) -> Result<PokemonData> {
         let RustemonPokemon {
             name,
             types,
@@ -46,14 +46,14 @@ impl ApiWrapper {
             None => None,
         };
 
-        let mut moves_hashmap = HashMap::new();
+        let mut learn_moves = HashMap::new();
         moves.iter().for_each(|mv| {
             let version_group = mv
                 .version_group_details
                 .iter()
                 .find(|vg| vg.version_group.name == version);
             if let Some(vg) = version_group {
-                moves_hashmap.insert(
+                learn_moves.insert(
                     mv.move_.name.clone(),
                     (
                         vg.move_learn_method.name.clone(),
@@ -63,13 +63,13 @@ impl ApiWrapper {
             }
         });
 
-        Ok(Pokemon {
+        Ok(PokemonData {
             name,
             primary_type,
             secondary_type,
-            moves: moves_hashmap,
+            learn_moves,
             stats: self.extract_stats(stats),
-            version: version.to_string(),
+            game: version.to_string(),
             generation,
             api: self,
         })
@@ -114,8 +114,8 @@ impl ApiWrapper {
 
         Ok(Type {
             name: type_.name,
-            offense_chart: TypeChart::from_hashmap(offense_chart),
-            defense_chart: TypeChart::from_hashmap(defense_chart),
+            offense_chart: TypeChart::new(offense_chart),
+            defense_chart: TypeChart::new(defense_chart),
             api: self,
         })
     }
