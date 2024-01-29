@@ -6,14 +6,17 @@ use regex::Regex;
 use rustemon::client::RustemonClient;
 use rustemon::games::version_group as rustemon_version;
 use rustemon::moves as rustemon_moves;
-use rustemon::pokemon::{pokemon as rustemon_pokemon, type_ as rustemon_type};
+use rustemon::pokemon::{
+    ability as rustemon_ability, pokemon as rustemon_pokemon, type_ as rustemon_type,
+};
 
 use rustemon::model::games::VersionGroup as RustemonVersion;
 use rustemon::model::moves::Move as RustemonMove;
+use rustemon::model::pokemon::Ability as RustemonAbility;
 use rustemon::model::pokemon::Pokemon as RustemonPokemon;
 use rustemon::model::pokemon::PokemonStat as RustemonStat;
 
-use crate::pokemon::{Move, PokemonData, Stats, Type, TypeChart};
+use crate::pokemon::{Ability, Move, PokemonData, Stats, Type, TypeChart};
 
 pub struct ApiWrapper {
     client: RustemonClient,
@@ -35,16 +38,14 @@ impl ApiWrapper {
             types,
             moves,
             stats,
+            abilities,
             ..
-        } = rustemon_pokemon::get_by_name(&pokemon, &self.client).await?;
+        } = rustemon_pokemon::get_by_name(pokemon, &self.client).await?;
         let generation = self.get_generation(version).await?;
 
         let mut types = types.iter();
         let primary_type = types.find(|t| t.slot == 1).unwrap().type_.name.clone();
-        let secondary_type = match types.find(|t| t.slot == 2) {
-            Some(t) => Some(t.type_.name.clone()),
-            None => None,
-        };
+        let secondary_type = types.find(|t| t.slot == 2).map(|t| t.type_.name.clone());
 
         let mut learn_moves = HashMap::new();
         moves.iter().for_each(|mv| {
@@ -55,19 +56,21 @@ impl ApiWrapper {
             if let Some(vg) = version_group {
                 learn_moves.insert(
                     mv.move_.name.clone(),
-                    (
-                        vg.move_learn_method.name.clone(),
-                        vg.level_learned_at.clone(),
-                    ),
+                    (vg.move_learn_method.name.clone(), vg.level_learned_at),
                 );
             }
         });
+        let abilities = abilities
+            .iter()
+            .map(|a| (a.ability.name.clone(), a.is_hidden))
+            .collect::<Vec<_>>();
 
         Ok(PokemonData {
             name,
             primary_type,
             secondary_type,
             learn_moves,
+            abilities,
             stats: self.extract_stats(stats),
             game: version.to_string(),
             generation,
@@ -149,6 +152,25 @@ impl ApiWrapper {
         })
     }
 
+    pub async fn get_ability(&self, name: &str) -> Result<Ability> {
+        let RustemonAbility {
+            name,
+            effect_entries,
+            ..
+        } = rustemon_ability::get_by_name(name, &self.client).await?;
+        let effect_entry = effect_entries
+            .into_iter()
+            .find(|e| e.language.name == "en")
+            .unwrap_or_default();
+
+        Ok(Ability {
+            name,
+            effect: effect_entry.effect,
+            effect_short: effect_entry.short_effect,
+            api: self,
+        })
+    }
+
     pub async fn get_generation(&self, version: &str) -> Result<u8> {
         let RustemonVersion { generation, .. } =
             rustemon_version::get_by_name(version, &self.client).await?;
@@ -157,7 +179,7 @@ impl ApiWrapper {
     }
 
     fn extract_gen_from_url(&self, url: &str) -> Result<u8> {
-        let caps = self.gen_url_regex.captures(&url).unwrap();
+        let caps = self.gen_url_regex.captures(url).unwrap();
         let generation = caps["gen"].parse::<u8>()?;
         Ok(generation)
     }

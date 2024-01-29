@@ -29,6 +29,7 @@ pub struct PokemonData<'a> {
     pub game: String,
     pub generation: u8,
     pub stats: Stats,
+    pub abilities: Vec<(String, bool)>,
     pub api: &'a ApiWrapper,
 }
 
@@ -82,6 +83,7 @@ impl<'a> Type<'a> {
     }
 }
 
+#[derive(Default)]
 pub struct Stats {
     pub hp: i64,
     pub attack: i64,
@@ -89,19 +91,6 @@ pub struct Stats {
     pub special_attack: i64,
     pub special_defense: i64,
     pub speed: i64,
-}
-
-impl Default for Stats {
-    fn default() -> Self {
-        Self {
-            hp: 0,
-            attack: 0,
-            defense: 0,
-            special_attack: 0,
-            special_defense: 0,
-            speed: 0,
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -137,21 +126,21 @@ impl TypeChart {
     }
 
     pub fn get_multiplier(&self, type_: &str) -> f32 {
-        self.value.get(type_).unwrap().clone()
+        *self.value.get(type_).unwrap()
     }
 
     fn combine(&self, chart: &TypeChart) -> TypeChart {
         let mut new_chart = HashMap::new();
 
         for (type_, multiplier) in &self.value {
-            new_chart.insert(type_.clone(), multiplier.clone());
+            new_chart.insert(type_.clone(), *multiplier);
         }
 
         for (type_, multiplier) in &chart.value {
             if let Some(new_multiplier) = new_chart.get(type_) {
                 new_chart.insert(type_.clone(), multiplier * new_multiplier);
             } else {
-                new_chart.insert(type_.clone(), multiplier.clone());
+                new_chart.insert(type_.clone(), *multiplier);
             }
         }
 
@@ -173,7 +162,7 @@ pub struct Move<'a> {
 
 impl<'a> Move<'a> {
     pub async fn from_name(api: &'a ApiWrapper, name: &str) -> Result<Self> {
-        api.get_move(&name).await
+        api.get_move(name).await
     }
 }
 
@@ -191,9 +180,22 @@ impl<'a> MoveList<'a> {
     }
 }
 
+pub struct Ability<'a> {
+    pub name: String,
+    pub effect: String,
+    pub effect_short: String,
+    pub api: &'a ApiWrapper,
+}
+
+impl<'a> Ability<'a> {
+    pub async fn from_name(api: &'a ApiWrapper, name: &str) -> Result<Self> {
+        api.get_ability(name).await
+    }
+}
+
 pub fn is_stab(type_: &str, pokemon: &PokemonData) -> bool {
     if let Some(secondary_type) = &pokemon.secondary_type {
-        type_ == pokemon.primary_type || &type_ == secondary_type
+        type_ == pokemon.primary_type || type_ == secondary_type
     } else {
         type_ == pokemon.primary_type
     }

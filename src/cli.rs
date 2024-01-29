@@ -6,7 +6,7 @@ use clap::{Parser, Subcommand};
 use indoc::printdoc;
 
 use crate::api::ApiWrapper;
-use crate::pokemon::{Move, Pokemon, PokemonData, Type};
+use crate::pokemon::{Ability, Move, Pokemon, PokemonData, Type};
 use display::*;
 
 #[derive(Parser)]
@@ -22,6 +22,8 @@ struct Cli {
 enum Commands {
     Pokemon {
         name: String,
+        #[arg(short, long, action = clap::ArgAction::SetTrue)]
+        moves: bool,
     },
     Match {
         defender: String,
@@ -35,6 +37,9 @@ enum Commands {
     Move {
         name: String,
     },
+    Ability {
+        name: String,
+    },
 }
 
 pub async fn run() -> Result<()> {
@@ -43,9 +48,10 @@ pub async fn run() -> Result<()> {
     let program = Program::new(version);
 
     match cli.command {
-        Some(Commands::Pokemon { name }) => program.run_pokemon(name).await?,
+        Some(Commands::Pokemon { name, moves }) => program.run_pokemon(name, moves).await?,
         Some(Commands::Type { name }) => program.run_type(name).await?,
         Some(Commands::Move { name }) => program.run_move(name).await?,
+        Some(Commands::Ability { name }) => program.run_ability(name).await?,
         Some(Commands::Match {
             defender,
             attacker,
@@ -66,27 +72,31 @@ impl Program {
         Self { game: version }
     }
 
-    async fn run_pokemon(&self, name: String) -> Result<()> {
+    async fn run_pokemon(&self, name: String, moves: bool) -> Result<()> {
         let api = ApiWrapper::default();
 
         let pokemon = PokemonData::from_name(&api, &name, &self.game).await?;
-        let pokemon_display = PokemonDisplay::new(&pokemon);
+        if moves {
+            let moves = pokemon.get_moves().await?;
+            let move_list_display = MoveListDisplay::new(&moves, &pokemon);
+            printdoc! {
+                "
+                {move_list_display}
+                "
+            };
+        } else {
+            let pokemon_display = PokemonDisplay::new(&pokemon);
 
-        let defense_chart = pokemon.get_defense_chart().await?;
-        let type_chart_display = TypeChartDisplay::new(&defense_chart, "defense chart");
+            let defense_chart = pokemon.get_defense_chart().await?;
+            let type_chart_display = TypeChartDisplay::new(&defense_chart, "defense chart");
+            printdoc! {
+                "
+                {pokemon_display}
 
-        let moves = pokemon.get_moves().await?;
-        let move_list_display = MoveListDisplay::new(&moves, &pokemon);
-
-        printdoc! {
-            "
-            {pokemon_display}
-
-            {type_chart_display}
-
-            {move_list_display}
-            "
-        };
+                {type_chart_display}
+                "
+            };
+        }
 
         Ok(())
     }
@@ -145,6 +155,20 @@ impl Program {
         printdoc! {
             "
             {move_display}
+            "
+        };
+
+        Ok(())
+    }
+
+    async fn run_ability(&self, name: String) -> Result<()> {
+        let api = ApiWrapper::default();
+        let ability = Ability::from_name(&api, &name).await?;
+        let ability_display = AbilityDisplay::new(&ability);
+
+        printdoc! {
+            "
+            {ability_display}
             "
         };
 

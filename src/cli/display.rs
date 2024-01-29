@@ -4,7 +4,7 @@ use indoc::{formatdoc, writedoc};
 use owo_colors::Style;
 
 use crate::cli::utils::{StyleSheet, WeaknessGroups};
-use crate::pokemon::{self, Move, MoveList, Pokemon, PokemonData, Stats, TypeChart};
+use crate::pokemon::{self, Ability, Move, MoveList, Pokemon, PokemonData, Stats, TypeChart};
 
 pub struct PokemonDisplay<'a, 'b> {
     pokemon: &'a PokemonData<'b>,
@@ -20,16 +20,29 @@ impl fmt::Display for PokemonDisplay<'_, '_> {
             primary_type,
             secondary_type,
             stats,
+            abilities,
             ..
         } = self.pokemon;
 
         let stats_display = StatsDisplay::new(stats);
+        let abilities = abilities
+            .iter()
+            .map(|a| {
+                if a.1 {
+                    format!("{}(h)", a.0)
+                } else {
+                    a.0.clone()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" ");
 
         writedoc! {
             f,
-            "{name} {version}({generation})
-            {primary_type} {secondary_type}
-            {stats_display}",
+            "{name} {primary_type} {secondary_type}
+            {abilities}
+            {stats_display}
+            {version}({generation})",
             name = self.css.header.style(name),
             secondary_type = secondary_type.as_ref().unwrap_or(&"".to_string())
         }
@@ -92,9 +105,8 @@ pub struct TypeChartDisplay<'a> {
 
 impl fmt::Display for TypeChartDisplay<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let weakness_groups = WeaknessGroups::new(self.type_chart.get_value(), |t| {
-            Some((t.0.clone(), t.1.clone()))
-        });
+        let weakness_groups =
+            WeaknessGroups::new(self.type_chart.get_value(), |t| Some((t.0.clone(), *t.1)));
         let type_chart = self.format_type_chart(weakness_groups);
 
         writedoc! {
@@ -123,25 +135,25 @@ impl<'a> TypeChartDisplay<'a> {
         let mut zero = String::from("");
         let mut other = String::from("");
 
-        if weakness_groups.quad.len() > 0 {
+        if !weakness_groups.quad.is_empty() {
             quad = self.format_group("quad", weakness_groups.quad, self.css.quad);
         }
-        if weakness_groups.double.len() > 0 {
+        if !weakness_groups.double.is_empty() {
             double = self.format_group("double", weakness_groups.double, self.css.double);
         }
-        if weakness_groups.neutral.len() > 0 {
+        if !weakness_groups.neutral.is_empty() {
             neutral = self.format_group("neutral", weakness_groups.neutral, self.css.neutral);
         }
-        if weakness_groups.half.len() > 0 {
+        if !weakness_groups.half.is_empty() {
             half = self.format_group("half", weakness_groups.half, self.css.half);
         }
-        if weakness_groups.quarter.len() > 0 {
+        if !weakness_groups.quarter.is_empty() {
             quarter = self.format_group("quarter", weakness_groups.quarter, self.css.quarter);
         }
-        if weakness_groups.zero.len() > 0 {
+        if !weakness_groups.zero.is_empty() {
             zero = self.format_group("zero", weakness_groups.zero, self.css.zero);
         }
-        if weakness_groups.other.len() > 0 {
+        if !weakness_groups.other.is_empty() {
             other = self.format_group("other", weakness_groups.other, self.css.neutral);
         }
 
@@ -247,13 +259,13 @@ impl<'a, 'b, 'c> MatchDisplay<'a, 'b, 'c> {
         let mut zero = String::from("");
         let mut other = String::from("");
 
-        if weakness_groups.quad.len() > 0 {
+        if !weakness_groups.quad.is_empty() {
             quad = self.format_group("quad", weakness_groups.quad, attacker, self.css.quad);
         }
-        if weakness_groups.double.len() > 0 {
+        if !weakness_groups.double.is_empty() {
             double = self.format_group("double", weakness_groups.double, attacker, self.css.double);
         }
-        if weakness_groups.neutral.len() > 0 {
+        if !weakness_groups.neutral.is_empty() {
             neutral = self.format_group(
                 "neutral",
                 weakness_groups.neutral,
@@ -261,10 +273,10 @@ impl<'a, 'b, 'c> MatchDisplay<'a, 'b, 'c> {
                 self.css.neutral,
             );
         }
-        if weakness_groups.half.len() > 0 {
+        if !weakness_groups.half.is_empty() {
             half = self.format_group("half", weakness_groups.half, attacker, self.css.half);
         }
-        if weakness_groups.quarter.len() > 0 {
+        if !weakness_groups.quarter.is_empty() {
             quarter = self.format_group(
                 "quarter",
                 weakness_groups.quarter,
@@ -272,10 +284,10 @@ impl<'a, 'b, 'c> MatchDisplay<'a, 'b, 'c> {
                 self.css.quarter,
             );
         }
-        if weakness_groups.zero.len() > 0 {
+        if !weakness_groups.zero.is_empty() {
             zero = self.format_group("zero", weakness_groups.zero, attacker, self.css.zero);
         }
-        if weakness_groups.other.len() > 0 {
+        if !weakness_groups.other.is_empty() {
             other = self.format_group("other", weakness_groups.other, attacker, self.css.neutral);
         }
 
@@ -300,12 +312,11 @@ impl<'a, 'b, 'c> MatchDisplay<'a, 'b, 'c> {
                 _ => "?",
             };
             let move_string = format!("{}({})", move_.name, damage_class);
-            let styled_move;
-            if pokemon::is_stab(&move_.type_, attacker) {
-                styled_move = group_style.underline().style(move_string);
+            let styled_move = if pokemon::is_stab(&move_.type_, attacker) {
+                group_style.underline().style(move_string)
             } else {
-                styled_move = group_style.style(move_string);
-            }
+                group_style.style(move_string)
+            };
 
             output.push_str(format!("{} ", styled_move).as_str());
         }
@@ -322,7 +333,7 @@ pub struct MoveListDisplay<'a, 'b, 'c> {
 
 impl fmt::Display for MoveListDisplay<'_, '_, '_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}\n", self.css.header.style("moves"))?;
+        write!(f, "{}", self.css.header.style("moves"))?;
 
         for move_ in self.move_list.get_value() {
             let Move {
@@ -362,9 +373,7 @@ impl fmt::Display for MoveListDisplay<'_, '_, '_> {
 
             writedoc! {
                 f,
-                "
-                {move_name:33}{type_damage:22}{stats:80}{learn}
-                ",
+                "\n{move_name:33}{type_damage:22}{stats:80}{learn}",
             }?;
         }
 
@@ -422,6 +431,33 @@ impl<'a, 'b> MoveDisplay<'a, 'b> {
     pub fn new(move_: &'a Move<'b>) -> Self {
         MoveDisplay {
             move_,
+            css: StyleSheet::default(),
+        }
+    }
+}
+
+pub struct AbilityDisplay<'a, 'b> {
+    ability: &'a Ability<'b>,
+    css: StyleSheet,
+}
+
+impl fmt::Display for AbilityDisplay<'_, '_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let Ability { name, effect, .. } = self.ability;
+
+        writedoc! {
+            f,
+            "{name}
+            {effect}",
+            name = self.css.header.style(name),
+        }
+    }
+}
+
+impl<'a, 'b> AbilityDisplay<'a, 'b> {
+    pub fn new(ability: &'a Ability<'b>) -> Self {
+        AbilityDisplay {
+            ability,
             css: StyleSheet::default(),
         }
     }
