@@ -30,6 +30,7 @@ pub struct PokemonData<'a> {
     pub generation: u8,
     pub stats: Stats,
     pub abilities: Vec<(String, bool)>,
+    pub species: String,
     pub api: &'a ApiWrapper,
 }
 
@@ -67,6 +68,10 @@ impl<'a> PokemonData<'a> {
         } else {
             Ok(primary_type.defense_chart)
         }
+    }
+
+    pub async fn get_evolution_steps(&self) -> Result<EvolutionStep> {
+        self.api.get_evolution_steps(&self.species).await
     }
 }
 
@@ -190,6 +195,155 @@ pub struct Ability<'a> {
 impl<'a> Ability<'a> {
     pub async fn from_name(api: &'a ApiWrapper, name: &str) -> Result<Self> {
         api.get_ability(name).await
+    }
+}
+
+#[derive(Debug)]
+pub struct EvolutionStep {
+    pub name: String,
+    pub method: Vec<EvolutionMethod>,
+    pub evolves_to: Vec<EvolutionStep>,
+}
+
+impl EvolutionStep {
+    pub fn new(name: String, method: Vec<EvolutionMethod>, evolves_to: Vec<EvolutionStep>) -> Self {
+        Self {
+            name,
+            method,
+            evolves_to,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct EvolutionMethod {
+    pub trigger: String,
+    pub item: Option<String>,
+    pub gender: Option<i64>,
+    pub held_item: Option<String>,
+    pub known_move: Option<String>,
+    pub known_move_type: Option<String>,
+    pub location: Option<String>,
+    pub min_level: Option<i64>,
+    pub min_happiness: Option<i64>,
+    pub min_beauty: Option<i64>,
+    pub min_affection: Option<i64>,
+    pub needs_overworld_rain: Option<bool>,
+    pub party_species: Option<String>,
+    pub party_type: Option<String>,
+    pub relative_physical_stats: Option<i64>,
+    pub time_of_day: Option<String>,
+    pub trade_species: Option<String>,
+    pub turn_upside_down: Option<bool>,
+}
+
+impl EvolutionMethod {
+    pub fn new(trigger: String) -> Self {
+        Self {
+            trigger,
+            item: None,
+            gender: None,
+            held_item: None,
+            known_move: None,
+            known_move_type: None,
+            location: None,
+            min_level: None,
+            min_happiness: None,
+            min_beauty: None,
+            min_affection: None,
+            needs_overworld_rain: None,
+            party_species: None,
+            party_type: None,
+            relative_physical_stats: None,
+            time_of_day: None,
+            trade_species: None,
+            turn_upside_down: None,
+        }
+    }
+
+    pub fn item(mut self, item: String) -> Self {
+        self.item = Some(item);
+        self
+    }
+
+    pub fn gender(mut self, gender: i64) -> Self {
+        self.gender = Some(gender);
+        self
+    }
+
+    pub fn held_item(mut self, held_item: String) -> Self {
+        self.held_item = Some(held_item);
+        self
+    }
+
+    pub fn known_move(mut self, known_move: String) -> Self {
+        self.known_move = Some(known_move);
+        self
+    }
+
+    pub fn known_move_type(mut self, known_move_type: String) -> Self {
+        self.known_move_type = Some(known_move_type);
+        self
+    }
+
+    pub fn location(mut self, location: String) -> Self {
+        self.location = Some(location);
+        self
+    }
+
+    pub fn min_level(mut self, min_level: i64) -> Self {
+        self.min_level = Some(min_level);
+        self
+    }
+
+    pub fn min_happiness(mut self, min_happiness: i64) -> Self {
+        self.min_happiness = Some(min_happiness);
+        self
+    }
+
+    pub fn min_beauty(mut self, min_beauty: i64) -> Self {
+        self.min_beauty = Some(min_beauty);
+        self
+    }
+
+    pub fn min_affection(mut self, min_affection: i64) -> Self {
+        self.min_affection = Some(min_affection);
+        self
+    }
+
+    pub fn needs_overworld_rain(mut self, needs_overworld_rain: bool) -> Self {
+        self.needs_overworld_rain = Some(needs_overworld_rain);
+        self
+    }
+
+    pub fn party_species(mut self, party_species: String) -> Self {
+        self.party_species = Some(party_species);
+        self
+    }
+
+    pub fn party_type(mut self, party_type: String) -> Self {
+        self.party_type = Some(party_type);
+        self
+    }
+
+    pub fn relative_physical_stats(mut self, relative_physical_stats: i64) -> Self {
+        self.relative_physical_stats = Some(relative_physical_stats);
+        self
+    }
+
+    pub fn time_of_day(mut self, time_of_day: String) -> Self {
+        self.time_of_day = Some(time_of_day);
+        self
+    }
+
+    pub fn trade_species(mut self, trade_species: String) -> Self {
+        self.trade_species = Some(trade_species);
+        self
+    }
+
+    pub fn turn_upside_down(mut self, turn_upside_down: bool) -> Self {
+        self.turn_upside_down = Some(turn_upside_down);
+        self
     }
 }
 

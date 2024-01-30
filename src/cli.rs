@@ -24,6 +24,8 @@ enum Commands {
         name: String,
         #[arg(short, long, action = clap::ArgAction::SetTrue)]
         moves: bool,
+        #[arg(short, long, action = clap::ArgAction::SetTrue)]
+        evolution: bool,
     },
     Match {
         defender: String,
@@ -48,7 +50,11 @@ pub async fn run() -> Result<()> {
     let program = Program::new(version);
 
     match cli.command {
-        Some(Commands::Pokemon { name, moves }) => program.run_pokemon(name, moves).await?,
+        Some(Commands::Pokemon {
+            name,
+            moves,
+            evolution,
+        }) => program.run_pokemon(name, moves, evolution).await?,
         Some(Commands::Type { name }) => program.run_type(name).await?,
         Some(Commands::Move { name }) => program.run_move(name).await?,
         Some(Commands::Ability { name }) => program.run_ability(name).await?,
@@ -72,10 +78,23 @@ impl Program {
         Self { game: version }
     }
 
-    async fn run_pokemon(&self, name: String, moves: bool) -> Result<()> {
+    async fn run_pokemon(&self, name: String, moves: bool, evolution: bool) -> Result<()> {
         let api = ApiWrapper::default();
 
         let pokemon = PokemonData::from_name(&api, &name, &self.game).await?;
+        let pokemon_display = PokemonDisplay::new(&pokemon);
+
+        let defense_chart = pokemon.get_defense_chart().await?;
+        let type_chart_display = TypeChartDisplay::new(&defense_chart, "defense chart");
+
+        printdoc! {
+            "
+            {pokemon_display}
+
+            {type_chart_display}
+            "
+        };
+
         if moves {
             let moves = pokemon.get_moves().await?;
             let move_list_display = MoveListDisplay::new(&moves, &pokemon);
@@ -84,18 +103,11 @@ impl Program {
                 {move_list_display}
                 "
             };
-        } else {
-            let pokemon_display = PokemonDisplay::new(&pokemon);
+        }
 
-            let defense_chart = pokemon.get_defense_chart().await?;
-            let type_chart_display = TypeChartDisplay::new(&defense_chart, "defense chart");
-            printdoc! {
-                "
-                {pokemon_display}
-
-                {type_chart_display}
-                "
-            };
+        if evolution {
+            //todo
+            pokemon.get_evolution_steps().await?;
         }
 
         Ok(())
