@@ -201,15 +201,19 @@ impl<'a> Ability<'a> {
 #[derive(Debug)]
 pub struct EvolutionStep {
     pub name: String,
-    pub method: Vec<EvolutionMethod>,
+    pub methods: Vec<EvolutionMethod>,
     pub evolves_to: Vec<EvolutionStep>,
 }
 
 impl EvolutionStep {
-    pub fn new(name: String, method: Vec<EvolutionMethod>, evolves_to: Vec<EvolutionStep>) -> Self {
+    pub fn new(
+        name: String,
+        methods: Vec<EvolutionMethod>,
+        evolves_to: Vec<EvolutionStep>,
+    ) -> Self {
         Self {
             name,
-            method,
+            methods,
             evolves_to,
         }
     }

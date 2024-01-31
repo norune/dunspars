@@ -4,7 +4,10 @@ use indoc::{formatdoc, writedoc};
 use owo_colors::Style;
 
 use crate::cli::utils::{StyleSheet, WeaknessGroups};
-use crate::pokemon::{self, Ability, Move, MoveList, Pokemon, PokemonData, Stats, TypeChart};
+use crate::pokemon::{
+    self, Ability, EvolutionMethod, EvolutionStep, Move, MoveList, Pokemon, PokemonData, Stats,
+    TypeChart,
+};
 
 pub struct PokemonDisplay<'a, 'b> {
     pokemon: &'a PokemonData<'b>,
@@ -78,12 +81,12 @@ impl fmt::Display for StatsDisplay<'_> {
             f,
             "hp    atk   def   satk  sdef  spd
             {hp:<6}{attack:<6}{defense:<6}{special_attack:<6}{special_defense:<6}{speed:<6}",
-            hp = self.css.hp.style(hp),
-            attack = self.css.attack.style(attack),
-            defense = self.css.defense.style(defense),
-            special_attack = self.css.special_attack.style(special_attack),
-            special_defense = self.css.special_defense.style(special_defense),
-            speed = self.css.speed.style(speed),
+            hp = self.css.accent_red.style(hp),
+            attack = self.css.accent_yellow.style(attack),
+            defense = self.css.accent_blue.style(defense),
+            special_attack = self.css.accent_green.style(special_attack),
+            special_defense = self.css.accent_cyan.style(special_defense),
+            speed = self.css.accent_violet.style(speed),
         }
     }
 }
@@ -136,25 +139,25 @@ impl<'a> TypeChartDisplay<'a> {
         let mut other = String::from("");
 
         if !weakness_groups.quad.is_empty() {
-            quad = self.format_group("quad", weakness_groups.quad, self.css.quad);
+            quad = self.format_group("quad", weakness_groups.quad, self.css.accent_red);
         }
         if !weakness_groups.double.is_empty() {
-            double = self.format_group("double", weakness_groups.double, self.css.double);
+            double = self.format_group("double", weakness_groups.double, self.css.accent_yellow);
         }
         if !weakness_groups.neutral.is_empty() {
-            neutral = self.format_group("neutral", weakness_groups.neutral, self.css.neutral);
+            neutral = self.format_group("neutral", weakness_groups.neutral, self.css.accent_green);
         }
         if !weakness_groups.half.is_empty() {
-            half = self.format_group("half", weakness_groups.half, self.css.half);
+            half = self.format_group("half", weakness_groups.half, self.css.accent_blue);
         }
         if !weakness_groups.quarter.is_empty() {
-            quarter = self.format_group("quarter", weakness_groups.quarter, self.css.quarter);
+            quarter = self.format_group("quarter", weakness_groups.quarter, self.css.accent_cyan);
         }
         if !weakness_groups.zero.is_empty() {
-            zero = self.format_group("zero", weakness_groups.zero, self.css.zero);
+            zero = self.format_group("zero", weakness_groups.zero, self.css.accent_violet);
         }
         if !weakness_groups.other.is_empty() {
-            other = self.format_group("other", weakness_groups.other, self.css.neutral);
+            other = self.format_group("other", weakness_groups.other, self.css.accent_green);
         }
 
         formatdoc! {
@@ -260,35 +263,50 @@ impl<'a, 'b, 'c> MatchDisplay<'a, 'b, 'c> {
         let mut other = String::from("");
 
         if !weakness_groups.quad.is_empty() {
-            quad = self.format_group("quad", weakness_groups.quad, attacker, self.css.quad);
+            quad = self.format_group("quad", weakness_groups.quad, attacker, self.css.accent_red);
         }
         if !weakness_groups.double.is_empty() {
-            double = self.format_group("double", weakness_groups.double, attacker, self.css.double);
+            double = self.format_group(
+                "double",
+                weakness_groups.double,
+                attacker,
+                self.css.accent_yellow,
+            );
         }
         if !weakness_groups.neutral.is_empty() {
             neutral = self.format_group(
                 "neutral",
                 weakness_groups.neutral,
                 attacker,
-                self.css.neutral,
+                self.css.accent_green,
             );
         }
         if !weakness_groups.half.is_empty() {
-            half = self.format_group("half", weakness_groups.half, attacker, self.css.half);
+            half = self.format_group("half", weakness_groups.half, attacker, self.css.accent_blue);
         }
         if !weakness_groups.quarter.is_empty() {
             quarter = self.format_group(
                 "quarter",
                 weakness_groups.quarter,
                 attacker,
-                self.css.quarter,
+                self.css.accent_cyan,
             );
         }
         if !weakness_groups.zero.is_empty() {
-            zero = self.format_group("zero", weakness_groups.zero, attacker, self.css.zero);
+            zero = self.format_group(
+                "zero",
+                weakness_groups.zero,
+                attacker,
+                self.css.accent_violet,
+            );
         }
         if !weakness_groups.other.is_empty() {
-            other = self.format_group("other", weakness_groups.other, attacker, self.css.neutral);
+            other = self.format_group(
+                "other",
+                weakness_groups.other,
+                attacker,
+                self.css.accent_green,
+            );
         }
 
         formatdoc! {
@@ -318,7 +336,7 @@ impl<'a, 'b, 'c> MatchDisplay<'a, 'b, 'c> {
                 group_style.style(move_string)
             };
 
-            output.push_str(format!("{} ", styled_move).as_str());
+            output += &format!("{} ", styled_move);
         }
 
         output
@@ -349,13 +367,13 @@ impl fmt::Display for MoveListDisplay<'_, '_, '_> {
             let is_stab = pokemon::is_stab(&move_.1.type_, self.pokemon);
             let stab = if is_stab { "(s)" } else { "" };
 
-            let move_name = format!("{name}{stab}", name = self.css.move_.style(name));
+            let move_name = format!("{name}{stab}", name = self.css.accent_green.style(name));
             let type_damage = format!("{type_} {damage_class}");
             let stats = format!(
                 "power: {:3}  accuracy: {:3}  pp: {:2}",
-                self.css.power.style(power.unwrap_or(0)),
-                self.css.accuracy.style(accuracy.unwrap_or(0)),
-                self.css.pp.style(pp.unwrap_or(0))
+                self.css.accent_red.style(power.unwrap_or(0)),
+                self.css.accent_green.style(accuracy.unwrap_or(0)),
+                self.css.accent_blue.style(pp.unwrap_or(0))
             );
 
             let default_learn = ("".to_string(), 0i64);
@@ -411,9 +429,9 @@ impl fmt::Display for MoveDisplay<'_, '_> {
 
         let stats = format!(
             "power: {:3}  accuracy: {:3}  pp: {:3}",
-            self.css.power.style(power.unwrap_or(0)),
-            self.css.accuracy.style(accuracy.unwrap_or(0)),
-            self.css.pp.style(pp.unwrap_or(0))
+            self.css.accent_red.style(power.unwrap_or(0)),
+            self.css.accent_green.style(accuracy.unwrap_or(0)),
+            self.css.accent_blue.style(pp.unwrap_or(0))
         );
 
         writedoc! {
@@ -460,5 +478,162 @@ impl<'a, 'b> AbilityDisplay<'a, 'b> {
             ability,
             css: StyleSheet::default(),
         }
+    }
+}
+
+pub struct EvolutionStepDisplay<'a> {
+    evolution_step: &'a EvolutionStep,
+    css: StyleSheet,
+}
+
+impl fmt::Display for EvolutionStepDisplay<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.traverse_dfs(f, self.evolution_step, 0)?;
+        Ok(())
+    }
+}
+
+impl<'a> EvolutionStepDisplay<'a> {
+    pub fn new(evolution_step: &'a EvolutionStep) -> Self {
+        EvolutionStepDisplay {
+            evolution_step,
+            css: StyleSheet::default(),
+        }
+    }
+
+    pub fn traverse_dfs(
+        &self,
+        f: &mut fmt::Formatter,
+        node: &EvolutionStep,
+        depth: usize,
+    ) -> fmt::Result {
+        self.write_step(f, node, depth)?;
+        for child in &node.evolves_to {
+            writeln!(f)?;
+            self.traverse_dfs(f, child, depth + 1)?;
+        }
+
+        Ok(())
+    }
+
+    fn write_step(
+        &self,
+        f: &mut fmt::Formatter,
+        step: &EvolutionStep,
+        depth: usize,
+    ) -> fmt::Result {
+        let methods = self.format_methods(&step.methods);
+        write!(
+            f,
+            "{indentation}{species} {methods}",
+            indentation = "  ".repeat(depth),
+            species = self.css.header.style(&step.name),
+        )
+    }
+
+    fn format_methods(&self, methods: &[EvolutionMethod]) -> String {
+        methods
+            .iter()
+            .map(|m| self.format_method(m))
+            .collect::<Vec<String>>()
+            .join(" / ")
+    }
+
+    fn format_method(&self, method: &EvolutionMethod) -> String {
+        let EvolutionMethod {
+            trigger,
+            item,
+            gender,
+            held_item,
+            known_move,
+            known_move_type,
+            location,
+            min_level,
+            min_happiness,
+            min_beauty,
+            min_affection,
+            needs_overworld_rain,
+            party_species,
+            party_type,
+            relative_physical_stats,
+            time_of_day,
+            trade_species,
+            turn_upside_down,
+        } = method;
+        let mut output = format!("{}", self.css.accent_blue.style(trigger));
+
+        if let Some(item) = item {
+            output += &format!(" {item}");
+        }
+
+        if let Some(gender) = gender {
+            output += &format!(" gender-{gender}");
+        }
+
+        if let Some(held_item) = held_item {
+            output += &format!(" {held_item}");
+        }
+
+        if let Some(known_move) = known_move {
+            output += &format!(" {known_move}");
+        }
+
+        if let Some(known_move_type) = known_move_type {
+            output += &format!(" {known_move_type}");
+        }
+
+        if let Some(location) = location {
+            output += &format!(" {location}");
+        }
+
+        if let Some(min_level) = min_level {
+            output += &format!(" level-{min_level}");
+        }
+
+        if let Some(min_happiness) = min_happiness {
+            output += &format!(" happiness-{min_happiness}");
+        }
+
+        if let Some(min_beauty) = min_beauty {
+            output += &format!(" beauty-{min_beauty}");
+        }
+
+        if let Some(min_affection) = min_affection {
+            output += &format!(" affection-{min_affection}");
+        }
+
+        if let Some(needs_overworld_rain) = needs_overworld_rain {
+            if *needs_overworld_rain {
+                output += " rain";
+            }
+        }
+
+        if let Some(party_species) = party_species {
+            output += &format!(" {party_species}");
+        }
+
+        if let Some(party_type) = party_type {
+            output += &format!(" {party_type}");
+        }
+
+        if let Some(relative_physical_stats) = relative_physical_stats {
+            output += &format!(" physical-{relative_physical_stats}");
+        }
+
+        if let Some(time_of_day) = time_of_day {
+            output += &format!(" {time_of_day}");
+        }
+
+        if let Some(trade_species) = trade_species {
+            output += &format!(" {trade_species}");
+        }
+
+        if let Some(turn_upside_down) = turn_upside_down {
+            if *turn_upside_down {
+                output += " upside-down";
+            }
+        }
+
+        output
     }
 }

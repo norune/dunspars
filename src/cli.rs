@@ -95,19 +95,26 @@ impl Program {
             "
         };
 
+        if evolution {
+            let evolution_step = pokemon.get_evolution_steps().await?;
+            let evolution_step_display = EvolutionStepDisplay::new(&evolution_step);
+            printdoc! {
+                "
+
+                {evolution_step_display}
+                "
+            };
+        }
+
         if moves {
             let moves = pokemon.get_moves().await?;
             let move_list_display = MoveListDisplay::new(&moves, &pokemon);
             printdoc! {
                 "
+
                 {move_list_display}
                 "
             };
-        }
-
-        if evolution {
-            //todo
-            pokemon.get_evolution_steps().await?;
         }
 
         Ok(())

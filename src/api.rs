@@ -13,7 +13,8 @@ use rustemon::pokemon::{
 use rustemon::Follow;
 
 use rustemon::model::evolution::{
-    ChainLink as RustemonChainLink, EvolutionDetail as RustemonEvolution,
+    ChainLink as RustemonEvoStep, EvolutionChain as RustemonEvoRoot,
+    EvolutionDetail as RustemonEvoMethod,
 };
 use rustemon::model::games::VersionGroup as RustemonVersion;
 use rustemon::model::moves::Move as RustemonMove;
@@ -180,20 +181,20 @@ impl ApiWrapper {
     }
 
     pub async fn get_evolution_steps(&self, species: &str) -> Result<EvolutionStep> {
-        let evolution_chain = rustemon_species::get_by_name(species, &self.client)
+        let RustemonEvoRoot { chain, .. } = rustemon_species::get_by_name(species, &self.client)
             .await?
             .evolution_chain
             .unwrap()
             .follow(&self.client)
             .await?;
-        let evolution_step = traverse_chain(evolution_chain.chain);
+        let evolution_step = traverse_chain(chain);
 
         Ok(evolution_step)
     }
 }
 
-fn traverse_chain(chain_link: RustemonChainLink) -> EvolutionStep {
-    let evolution_method = chain_link
+fn traverse_chain(chain_link: RustemonEvoStep) -> EvolutionStep {
+    let evolution_methods = chain_link
         .evolution_details
         .into_iter()
         .map(convert_to_evolution_method)
@@ -206,13 +207,13 @@ fn traverse_chain(chain_link: RustemonChainLink) -> EvolutionStep {
             .map(traverse_chain)
             .collect();
 
-        EvolutionStep::new(chain_link.species.name, evolution_method, evolves_to)
+        EvolutionStep::new(chain_link.species.name, evolution_methods, evolves_to)
     } else {
-        EvolutionStep::new(chain_link.species.name, evolution_method, vec![])
+        EvolutionStep::new(chain_link.species.name, evolution_methods, vec![])
     }
 }
 
-fn convert_to_evolution_method(evolution: RustemonEvolution) -> EvolutionMethod {
+fn convert_to_evolution_method(evolution: RustemonEvoMethod) -> EvolutionMethod {
     let mut method = EvolutionMethod::new(evolution.trigger.name);
     if let Some(item) = evolution.item {
         method = method.item(item.name);
