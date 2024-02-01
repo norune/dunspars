@@ -47,7 +47,7 @@ impl fmt::Display for PokemonDisplay<'_, '_> {
             {stats_display}
             {version}({generation})",
             name = self.css.header.style(name),
-            secondary_type = secondary_type.as_ref().unwrap_or(&"".to_string())
+            secondary_type = secondary_type.as_deref().unwrap_or("")
         }
     }
 }
@@ -182,33 +182,40 @@ impl fmt::Display for MatchDisplay<'_, '_, '_> {
         let defender_weakness_group = self.get_weakness_groups(self.defender, self.attacker);
         let attacker_weakness_group = self.get_weakness_groups(self.attacker, self.defender);
 
-        let stats = self.format_stats();
+        let defender_stats = StatsDisplay::new(&self.defender.data.stats);
+        let attacker_stats = StatsDisplay::new(&self.attacker.data.stats);
         let defender_weaknesses =
             self.format_weakness_groups(defender_weakness_group, &self.attacker.data);
         let attacker_weaknesses =
             self.format_weakness_groups(attacker_weakness_group, &self.defender.data);
 
-        let stats_header = format!("{} vs {}", self.defender.data.name, self.attacker.data.name);
-        let defender_header = format!(
+        let defender_moves_header = format!(
             "{}'s moves vs {}",
             self.attacker.data.name, self.defender.data.name
         );
-        let attacker_header = format!(
+        let attacker_moves_header = format!(
             "{}'s moves vs {}",
             self.defender.data.name, self.attacker.data.name
         );
 
         writedoc! {
             f,
-            "{stats_header}
-            {stats}
+            "{defender_header} {defender_primary_type} {defender_secondary_type}
+            {defender_stats}
+            {attacker_header} {attacker_primary_type} {attacker_secondary_type}
+            {attacker_stats}
 
-            {defender_header}{defender_weaknesses}
+            {defender_moves_header}{defender_weaknesses}
 
-            {attacker_header}{attacker_weaknesses}",
-            stats_header = self.css.header.style(stats_header),
-            defender_header = self.css.header.style(defender_header),
-            attacker_header = self.css.header.style(attacker_header),
+            {attacker_moves_header}{attacker_weaknesses}",
+            defender_header = self.css.header.style(&self.defender.data.name),
+            defender_primary_type = self.defender.data.primary_type,
+            defender_secondary_type = self.defender.data.secondary_type.as_deref().unwrap_or(""),
+            attacker_header = self.css.header.style(&self.attacker.data.name),
+            attacker_primary_type = self.attacker.data.primary_type,
+            attacker_secondary_type = self.attacker.data.secondary_type.as_deref().unwrap_or(""),
+            defender_moves_header = self.css.header.style(defender_moves_header),
+            attacker_moves_header = self.css.header.style(attacker_moves_header),
         }
     }
 }
@@ -220,15 +227,6 @@ impl<'a, 'b, 'c> MatchDisplay<'a, 'b, 'c> {
             attacker,
             stab_only,
             css: StyleSheet::default(),
-        }
-    }
-
-    fn format_stats(&self) -> String {
-        let defender_stats = StatsDisplay::new(&self.defender.data.stats);
-        let attacker_stats = StatsDisplay::new(&self.attacker.data.stats);
-        formatdoc! {
-            "{defender_stats}
-            {attacker_stats}"
         }
     }
 
@@ -423,6 +421,7 @@ impl fmt::Display for MoveDisplay<'_, '_> {
             name,
             effect,
             damage_class,
+            effect_chance,
             type_,
             ..
         } = self.move_;
@@ -434,13 +433,19 @@ impl fmt::Display for MoveDisplay<'_, '_> {
             self.css.accent_blue.style(pp.unwrap_or(0))
         );
 
+        let effect_text = if let Some(chance) = effect_chance {
+            effect.replace("$effect_chance", &chance.to_string())
+        } else {
+            effect.to_string()
+        };
+
         writedoc! {
             f,
             "{name}
             {type_} {damage_class}
             {stats}
-            {effect}",
-            name = self.css.header.style(name)
+            {effect_text}",
+            name = self.css.header.style(name),
         }
     }
 }
@@ -566,7 +571,12 @@ impl<'a> EvolutionStepDisplay<'a> {
             output += &format!(" {item}");
         }
 
-        if let Some(gender) = gender {
+        if let Some(gender_int) = gender {
+            let gender = match gender_int {
+                1 => "female",
+                2 => "male",
+                _ => "other",
+            };
             output += &format!(" gender-{gender}");
         }
 

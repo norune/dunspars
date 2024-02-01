@@ -122,11 +122,12 @@ impl Program {
 
     async fn run_type(&self, name: String) -> Result<()> {
         let api = ApiWrapper::default();
+        let generation = api.get_generation(&self.game).await?;
         let Type {
             offense_chart,
             defense_chart,
             ..
-        } = Type::from_name(&api, &name).await?;
+        } = Type::from_name(&api, &name, generation).await?;
 
         let offense_chart_display = TypeChartDisplay::new(&offense_chart, "offense chart");
         let defense_chart_display = TypeChartDisplay::new(&defense_chart, "defense chart");
@@ -168,7 +169,8 @@ impl Program {
 
     async fn run_move(&self, name: String) -> Result<()> {
         let api = ApiWrapper::default();
-        let move_ = Move::from_name(&api, &name).await?;
+        let generation = api.get_generation(&self.game).await?;
+        let move_ = Move::from_name(&api, &name, generation).await?;
         let move_display = MoveDisplay::new(&move_);
 
         printdoc! {
@@ -182,7 +184,8 @@ impl Program {
 
     async fn run_ability(&self, name: String) -> Result<()> {
         let api = ApiWrapper::default();
-        let ability = Ability::from_name(&api, &name).await?;
+        let generation = api.get_generation(&self.game).await?;
+        let ability = Ability::from_name(&api, &name, generation).await?;
         let ability_display = AbilityDisplay::new(&ability);
 
         printdoc! {

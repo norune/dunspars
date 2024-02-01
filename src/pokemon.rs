@@ -43,7 +43,7 @@ impl<'a> PokemonData<'a> {
         let moves_futures = self
             .learn_moves
             .iter()
-            .map(|mv| Move::from_name(self.api, mv.0))
+            .map(|mv| Move::from_name(self.api, mv.0, self.generation))
             .collect::<Vec<_>>();
         let moves_results = join_all(moves_futures).await;
 
@@ -57,10 +57,10 @@ impl<'a> PokemonData<'a> {
     }
 
     pub async fn get_defense_chart(&self) -> Result<TypeChart> {
-        let primary_type = Type::from_name(self.api, &self.primary_type).await?;
+        let primary_type = Type::from_name(self.api, &self.primary_type, self.generation).await?;
 
         if let Some(secondary_type) = &self.secondary_type {
-            let secondary_type = Type::from_name(self.api, secondary_type).await?;
+            let secondary_type = Type::from_name(self.api, secondary_type, self.generation).await?;
 
             Ok(primary_type
                 .defense_chart
@@ -79,12 +79,13 @@ pub struct Type<'a> {
     pub name: String,
     pub offense_chart: TypeChart,
     pub defense_chart: TypeChart,
+    pub generation: u8,
     pub api: &'a ApiWrapper,
 }
 
 impl<'a> Type<'a> {
-    pub async fn from_name(api: &'a ApiWrapper, name: &str) -> Result<Self> {
-        api.get_type(name).await
+    pub async fn from_name(api: &'a ApiWrapper, name: &str, generation: u8) -> Result<Self> {
+        api.get_type(name, generation).await
     }
 }
 
@@ -161,13 +162,15 @@ pub struct Move<'a> {
     pub damage_class: String,
     pub type_: String,
     pub effect: String,
-    pub effect_short: String,
+    pub short_effect: String,
+    pub effect_chance: Option<i64>,
+    pub generation: u8,
     pub api: &'a ApiWrapper,
 }
 
 impl<'a> Move<'a> {
-    pub async fn from_name(api: &'a ApiWrapper, name: &str) -> Result<Self> {
-        api.get_move(name).await
+    pub async fn from_name(api: &'a ApiWrapper, name: &str, generation: u8) -> Result<Self> {
+        api.get_move(name, generation).await
     }
 }
 
@@ -188,13 +191,14 @@ impl<'a> MoveList<'a> {
 pub struct Ability<'a> {
     pub name: String,
     pub effect: String,
-    pub effect_short: String,
+    pub short_effect: String,
+    pub generation: u8,
     pub api: &'a ApiWrapper,
 }
 
 impl<'a> Ability<'a> {
-    pub async fn from_name(api: &'a ApiWrapper, name: &str) -> Result<Self> {
-        api.get_ability(name).await
+    pub async fn from_name(api: &'a ApiWrapper, name: &str, generation: u8) -> Result<Self> {
+        api.get_ability(name, generation).await
     }
 }
 

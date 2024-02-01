@@ -17,11 +17,14 @@ use rustemon::model::evolution::{
     EvolutionDetail as RustemonEvoMethod,
 };
 use rustemon::model::games::VersionGroup as RustemonVersion;
-use rustemon::model::moves::Move as RustemonMove;
+use rustemon::model::moves::{Move as RustemonMove, PastMoveStatValues as RustemonPastMoveStats};
 use rustemon::model::pokemon::{
-    Ability as RustemonAbility, Pokemon as RustemonPokemon, PokemonStat as RustemonStat,
-    PokemonType as RustemonType, PokemonTypePast as RustemonPastType,
+    Ability as RustemonAbility, AbilityEffectChange as RustemonPastAbilityEffect,
+    Pokemon as RustemonPokemon, PokemonStat as RustemonStat, PokemonType as RustemonTypeSlot,
+    PokemonTypePast as RustemonPastPokemonType, Type as RustemonType,
+    TypeRelations as RustemonTypeRelations, TypeRelationsPast as RustemonPastTypeRelations,
 };
+use rustemon::model::resource::{Effect as RustemonEffect, VerboseEffect as RustemonVerboseEffect};
 
 use crate::pokemon::{
     Ability, EvolutionMethod, EvolutionStep, Move, PokemonData, Stats, Type, TypeChart,
@@ -46,15 +49,18 @@ impl ApiWrapper {
         } = rustemon_pokemon::get_by_name(pokemon, &self.client).await?;
         let generation = self.get_generation(game).await?;
 
-        let types = match_past_generation(generation, past_types).unwrap_or(types);
-        let primary_type = types
+        let pokemon_types = self
+            .match_past(generation, past_types)
+            .await
+            .unwrap_or(types);
+        let primary_type = pokemon_types
             .iter()
             .find(|t| t.slot == 1)
             .unwrap()
             .type_
             .name
             .clone();
-        let secondary_type = types
+        let secondary_type = pokemon_types
             .iter()
             .find(|t| t.slot == 2)
             .map(|t| t.type_.name.clone());
@@ -72,6 +78,7 @@ impl ApiWrapper {
                 );
             }
         });
+
         let abilities = abilities
             .iter()
             .map(|a| (a.ability.name.clone(), a.is_hidden))
@@ -91,66 +98,100 @@ impl ApiWrapper {
         })
     }
 
-    pub async fn get_type(&self, type_str: &str) -> Result<Type> {
-        let type_ = rustemon_type::get_by_name(type_str, &self.client).await?;
+    pub async fn get_type(&self, type_str: &str, generation: u8) -> Result<Type> {
+        let RustemonType {
+            name,
+            damage_relations,
+            past_damage_relations,
+            ..
+        } = rustemon_type::get_by_name(type_str, &self.client).await?;
+
+        let relations = self
+            .match_past(generation, past_damage_relations)
+            .await
+            .unwrap_or(damage_relations);
+
         let mut offense_chart = HashMap::new();
         let mut defense_chart = HashMap::new();
 
-        type_.damage_relations.no_damage_to.iter().for_each(|t| {
+        relations.no_damage_to.iter().for_each(|t| {
             offense_chart.insert(t.name.to_string(), 0.0);
         });
-        type_.damage_relations.half_damage_to.iter().for_each(|t| {
+        relations.half_damage_to.iter().for_each(|t| {
             offense_chart.insert(t.name.to_string(), 0.5);
         });
-        type_
-            .damage_relations
-            .double_damage_to
-            .iter()
-            .for_each(|t| {
-                offense_chart.insert(t.name.to_string(), 2.0);
-            });
+        relations.double_damage_to.iter().for_each(|t| {
+            offense_chart.insert(t.name.to_string(), 2.0);
+        });
 
-        type_.damage_relations.no_damage_from.iter().for_each(|t| {
+        relations.no_damage_from.iter().for_each(|t| {
             defense_chart.insert(t.name.to_string(), 0.0);
         });
-        type_
-            .damage_relations
-            .half_damage_from
-            .iter()
-            .for_each(|t| {
-                defense_chart.insert(t.name.to_string(), 0.5);
-            });
-        type_
-            .damage_relations
-            .double_damage_from
-            .iter()
-            .for_each(|t| {
-                defense_chart.insert(t.name.to_string(), 2.0);
-            });
+        relations.half_damage_from.iter().for_each(|t| {
+            defense_chart.insert(t.name.to_string(), 0.5);
+        });
+        relations.double_damage_from.iter().for_each(|t| {
+            defense_chart.insert(t.name.to_string(), 2.0);
+        });
 
         Ok(Type {
-            name: type_.name,
+            name,
             offense_chart: TypeChart::new(offense_chart),
             defense_chart: TypeChart::new(defense_chart),
+            generation,
             api: self,
         })
     }
 
-    pub async fn get_move(&self, name: &str) -> Result<Move> {
+    pub async fn get_move(&self, name: &str, generation: u8) -> Result<Move> {
         let RustemonMove {
             name,
-            accuracy,
-            power,
-            pp,
+            mut accuracy,
+            mut power,
+            mut pp,
             damage_class,
-            type_,
+            mut type_,
+            mut effect_chance,
             effect_entries,
+            effect_changes,
+            past_values,
             ..
         } = rustemon_moves::move_::get_by_name(name, &self.client).await?;
-        let effect_entry = effect_entries
+
+        let RustemonVerboseEffect {
+            mut effect,
+            mut short_effect,
+            ..
+        } = effect_entries
             .into_iter()
             .find(|e| e.language.name == "en")
             .unwrap_or_default();
+
+        if let Some(past_stats) = self.match_past(generation, past_values).await {
+            accuracy = past_stats.accuracy.or(accuracy);
+            power = past_stats.power.or(power);
+            pp = past_stats.pp.or(pp);
+            effect_chance = past_stats.effect_chance.or(effect_chance);
+
+            if let Some(t) = past_stats.type_ {
+                type_ = t;
+            }
+
+            if let Some(entry) = past_stats
+                .effect_entries
+                .into_iter()
+                .find(|e| e.language.name == "en")
+            {
+                effect = entry.effect;
+                short_effect = entry.short_effect;
+            }
+        }
+
+        if let Some(past_effects) = self.match_past(generation, effect_changes).await {
+            if let Some(past_effect) = past_effects.into_iter().find(|e| e.language.name == "en") {
+                effect += format!("\n\nGeneration {generation}: {}", past_effect.effect).as_str();
+            }
+        }
 
         Ok(Move {
             name,
@@ -159,27 +200,42 @@ impl ApiWrapper {
             pp,
             damage_class: damage_class.name,
             type_: type_.name,
-            effect: effect_entry.effect,
-            effect_short: effect_entry.short_effect,
+            effect_chance,
+            effect,
+            short_effect,
+            generation,
             api: self,
         })
     }
 
-    pub async fn get_ability(&self, name: &str) -> Result<Ability> {
+    pub async fn get_ability(&self, name: &str, generation: u8) -> Result<Ability> {
         let RustemonAbility {
             name,
             effect_entries,
+            effect_changes,
             ..
         } = rustemon_ability::get_by_name(name, &self.client).await?;
-        let effect_entry = effect_entries
+
+        let RustemonVerboseEffect {
+            mut effect,
+            short_effect,
+            ..
+        } = effect_entries
             .into_iter()
             .find(|e| e.language.name == "en")
             .unwrap_or_default();
 
+        if let Some(past_effects) = self.match_past(generation, effect_changes).await {
+            if let Some(past_effect) = past_effects.into_iter().find(|e| e.language.name == "en") {
+                effect += format!("\n\nGeneration {generation}: {}", past_effect.effect).as_str();
+            }
+        }
+
         Ok(Ability {
             name,
-            effect: effect_entry.effect,
-            effect_short: effect_entry.short_effect,
+            effect,
+            short_effect,
+            generation,
             api: self,
         })
     }
@@ -201,6 +257,21 @@ impl ApiWrapper {
         let evolution_step = traverse_chain(chain);
 
         Ok(evolution_step)
+    }
+
+    async fn match_past<T: Past<U>, U>(&self, current_generation: u8, pasts: Vec<T>) -> Option<U> {
+        let mut oldest_value = None;
+        let mut oldest_generation = 255;
+
+        for past in pasts {
+            let past_generation = past.generation(self).await;
+            if current_generation <= past_generation && past_generation <= oldest_generation {
+                oldest_value = Some(past.value());
+                oldest_generation = past_generation;
+            }
+        }
+
+        oldest_value
     }
 }
 
@@ -309,20 +380,47 @@ fn extract_stats(stats_vec: Vec<RustemonStat>) -> Stats {
     stats
 }
 
-fn match_past_generation(
-    current_generation: u8,
-    pasts: Vec<RustemonPastType>,
-) -> Option<Vec<RustemonType>> {
-    let mut oldest_type = None;
-    let mut oldest_generation = 255;
+trait Past<T> {
+    async fn generation(&self, api: &ApiWrapper) -> u8;
+    fn value(self) -> T;
+}
 
-    for past in pasts {
-        let past_generation = extract_gen_from_url(&past.generation.url).unwrap();
-        if current_generation <= past_generation && past_generation <= oldest_generation {
-            oldest_type = Some(past.types);
-            oldest_generation = past_generation;
-        }
+impl Past<Vec<RustemonTypeSlot>> for RustemonPastPokemonType {
+    async fn generation(&self, _api: &ApiWrapper) -> u8 {
+        extract_gen_from_url(&self.generation.url).unwrap()
     }
 
-    oldest_type
+    fn value(self) -> Vec<RustemonTypeSlot> {
+        self.types
+    }
+}
+
+impl Past<RustemonTypeRelations> for RustemonPastTypeRelations {
+    async fn generation(&self, _api: &ApiWrapper) -> u8 {
+        extract_gen_from_url(&self.generation.url).unwrap()
+    }
+
+    fn value(self) -> RustemonTypeRelations {
+        self.damage_relations
+    }
+}
+
+impl Past<RustemonPastMoveStats> for RustemonPastMoveStats {
+    async fn generation(&self, api: &ApiWrapper) -> u8 {
+        api.get_generation(&self.version_group.name).await.unwrap() - 1
+    }
+
+    fn value(self) -> RustemonPastMoveStats {
+        self
+    }
+}
+
+impl Past<Vec<RustemonEffect>> for RustemonPastAbilityEffect {
+    async fn generation(&self, api: &ApiWrapper) -> u8 {
+        api.get_generation(&self.version_group.name).await.unwrap() - 1
+    }
+
+    fn value(self) -> Vec<RustemonEffect> {
+        self.effect_entries
+    }
 }
