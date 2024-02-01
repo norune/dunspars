@@ -18,9 +18,10 @@ use rustemon::model::evolution::{
 };
 use rustemon::model::games::VersionGroup as RustemonVersion;
 use rustemon::model::moves::Move as RustemonMove;
-use rustemon::model::pokemon::Ability as RustemonAbility;
-use rustemon::model::pokemon::Pokemon as RustemonPokemon;
-use rustemon::model::pokemon::PokemonStat as RustemonStat;
+use rustemon::model::pokemon::{
+    Ability as RustemonAbility, Pokemon as RustemonPokemon, PokemonStat as RustemonStat,
+    PokemonType as RustemonType, PokemonTypePast as RustemonPastType,
+};
 
 use crate::pokemon::{
     Ability, EvolutionMethod, EvolutionStep, Move, PokemonData, Stats, Type, TypeChart,
@@ -32,28 +33,38 @@ pub struct ApiWrapper {
 }
 
 impl ApiWrapper {
-    pub async fn get_pokemon(&self, pokemon: &str, version: &str) -> Result<PokemonData> {
+    pub async fn get_pokemon(&self, pokemon: &str, game: &str) -> Result<PokemonData> {
         let RustemonPokemon {
             name,
             types,
+            past_types,
             moves,
             stats,
             abilities,
             species,
             ..
         } = rustemon_pokemon::get_by_name(pokemon, &self.client).await?;
-        let generation = self.get_generation(version).await?;
+        let generation = self.get_generation(game).await?;
 
-        let mut types = types.iter();
-        let primary_type = types.find(|t| t.slot == 1).unwrap().type_.name.clone();
-        let secondary_type = types.find(|t| t.slot == 2).map(|t| t.type_.name.clone());
+        let types = match_past_generation(generation, past_types).unwrap_or(types);
+        let primary_type = types
+            .iter()
+            .find(|t| t.slot == 1)
+            .unwrap()
+            .type_
+            .name
+            .clone();
+        let secondary_type = types
+            .iter()
+            .find(|t| t.slot == 2)
+            .map(|t| t.type_.name.clone());
 
         let mut learn_moves = HashMap::new();
         moves.iter().for_each(|mv| {
             let version_group = mv
                 .version_group_details
                 .iter()
-                .find(|vg| vg.version_group.name == version);
+                .find(|vg| vg.version_group.name == game);
             if let Some(vg) = version_group {
                 learn_moves.insert(
                     mv.move_.name.clone(),
@@ -74,7 +85,7 @@ impl ApiWrapper {
             abilities,
             species: species.name,
             stats: extract_stats(stats),
-            game: version.to_string(),
+            game: game.to_string(),
             generation,
             api: self,
         })
@@ -173,9 +184,9 @@ impl ApiWrapper {
         })
     }
 
-    pub async fn get_generation(&self, version: &str) -> Result<u8> {
+    pub async fn get_generation(&self, game: &str) -> Result<u8> {
         let RustemonVersion { generation, .. } =
-            rustemon_version::get_by_name(version, &self.client).await?;
+            rustemon_version::get_by_name(game, &self.client).await?;
 
         extract_gen_from_url(&generation.url)
     }
@@ -296,4 +307,22 @@ fn extract_stats(stats_vec: Vec<RustemonStat>) -> Stats {
     }
 
     stats
+}
+
+fn match_past_generation(
+    current_generation: u8,
+    pasts: Vec<RustemonPastType>,
+) -> Option<Vec<RustemonType>> {
+    let mut oldest_type = None;
+    let mut oldest_generation = 255;
+
+    for past in pasts {
+        let past_generation = extract_gen_from_url(&past.generation.url).unwrap();
+        if current_generation <= past_generation && past_generation <= oldest_generation {
+            oldest_type = Some(past.types);
+            oldest_generation = past_generation;
+        }
+    }
+
+    oldest_type
 }
