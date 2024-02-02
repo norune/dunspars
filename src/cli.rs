@@ -6,7 +6,10 @@ use clap::{Parser, Subcommand};
 use indoc::printdoc;
 
 use crate::api::ApiWrapper;
-use crate::pokemon::{Ability, Move, Pokemon, PokemonData, Type};
+use crate::pokemon::{
+    Ability, AbilityName, GameName, Move, MoveName, Pokemon, PokemonData, PokemonName,
+    ResourceName, Type, TypeName,
+};
 use display::*;
 
 #[derive(Parser)]
@@ -63,6 +66,9 @@ enum Commands {
         /// Name of the resource
         #[arg(value_enum)]
         resource: Resource,
+        /// Print values in newline instead
+        #[arg(short, long, action = clap::ArgAction::SetTrue)]
+        newline: bool,
     },
 }
 
@@ -75,10 +81,28 @@ pub enum Resource {
     Types,
 }
 
+impl Resource {
+    async fn get_resource(&self, api: &ApiWrapper) -> Result<Vec<String>> {
+        match self {
+            Resource::Pokemon => Ok(api.get_all_pokemon().await?),
+            Resource::Moves => Ok(api.get_all_moves().await?),
+            Resource::Abilities => Ok(api.get_all_abilities().await?),
+            Resource::Types => Ok(api.get_all_types().await?),
+            Resource::Games => Ok(api.get_all_games().await?),
+        }
+    }
+}
+
 pub async fn run() -> Result<()> {
     let cli = Cli::parse();
-    let version = cli.game.unwrap_or("scarlet-violet".to_string());
-    let program = Program::new(version);
+    let api = ApiWrapper::default();
+
+    let game_resource = Resource::Games.get_resource(&api).await?;
+    let game_name = cli.game.unwrap_or("scarlet-violet".to_string());
+    let game = GameName::try_new(&game_name, &game_resource)?;
+    let generation = api.get_generation(game.get()).await?;
+
+    let program = Program::new(game, generation, api);
 
     match cli.command {
         Some(Commands::Pokemon {
@@ -94,7 +118,9 @@ pub async fn run() -> Result<()> {
             attacker,
             stab_only,
         }) => program.run_match(defenders, attacker, stab_only).await?,
-        Some(Commands::Resource { resource }) => program.run_resource(resource).await?,
+        Some(Commands::Resource { resource, newline }) => {
+            program.run_resource(resource, newline).await?
+        }
         None => {}
     }
 
@@ -102,18 +128,26 @@ pub async fn run() -> Result<()> {
 }
 
 struct Program {
-    game: String,
+    game: GameName,
+    generation: u8,
+    api: ApiWrapper,
 }
 
 impl Program {
-    pub fn new(version: String) -> Self {
-        Self { game: version }
+    pub fn new(game: GameName, generation: u8, api: ApiWrapper) -> Self {
+        Self {
+            game,
+            generation,
+            api,
+        }
     }
 
-    async fn run_pokemon(&self, pokemon: String, moves: bool, evolution: bool) -> Result<()> {
-        let api = ApiWrapper::default();
+    async fn run_pokemon(&self, name: String, moves: bool, evolution: bool) -> Result<()> {
+        let resource = Resource::Pokemon.get_resource(&self.api).await?;
+        let pokemon_name = PokemonName::try_new(&name, &resource)?;
 
-        let pokemon = PokemonData::from_name(&api, &pokemon, &self.game).await?;
+        let pokemon =
+            PokemonData::from_name(&self.api, pokemon_name.get(), self.game.get()).await?;
         let pokemon_display = PokemonDisplay::new(&pokemon);
 
         let defense_chart = pokemon.get_defense_chart().await?;
@@ -152,14 +186,15 @@ impl Program {
         Ok(())
     }
 
-    async fn run_type(&self, type_: String) -> Result<()> {
-        let api = ApiWrapper::default();
-        let generation = api.get_generation(&self.game).await?;
+    async fn run_type(&self, name: String) -> Result<()> {
+        let resource = Resource::Types.get_resource(&self.api).await?;
+        let type_name = TypeName::try_new(&name, &resource)?;
+
         let Type {
             offense_chart,
             defense_chart,
             ..
-        } = Type::from_name(&api, &type_, generation).await?;
+        } = Type::from_name(&self.api, type_name.get(), self.generation).await?;
 
         let offense_chart_display = TypeChartDisplay::new(&offense_chart, "offense chart");
         let defense_chart_display = TypeChartDisplay::new(&defense_chart, "defense chart");
@@ -177,19 +212,23 @@ impl Program {
 
     async fn run_match(
         &self,
-        defenders: Vec<String>,
-        attacker: String,
+        defender_names: Vec<String>,
+        attacker_name: String,
         stab_only: bool,
     ) -> Result<()> {
-        let api = ApiWrapper::default();
+        let resource = Resource::Pokemon.get_resource(&self.api).await?;
 
-        for defender in defenders {
-            let defender_data = PokemonData::from_name(&api, &defender, &self.game).await?;
+        for defender_name in defender_names {
+            let defender_name = PokemonName::try_new(&defender_name, &resource)?;
+            let defender_data =
+                PokemonData::from_name(&self.api, defender_name.get(), self.game.get()).await?;
             let defender_moves = defender_data.get_moves().await?;
             let defender_chart = defender_data.get_defense_chart().await?;
             let defender = Pokemon::new(defender_data, defender_chart, defender_moves);
 
-            let attacker_data = PokemonData::from_name(&api, &attacker, &self.game).await?;
+            let attacker_name = PokemonName::try_new(&attacker_name, &resource)?;
+            let attacker_data =
+                PokemonData::from_name(&self.api, attacker_name.get(), self.game.get()).await?;
             let attacker_moves = attacker_data.get_moves().await?;
             let attacker_chart = attacker_data.get_defense_chart().await?;
             let attacker = Pokemon::new(attacker_data, attacker_chart, attacker_moves);
@@ -208,10 +247,11 @@ impl Program {
         Ok(())
     }
 
-    async fn run_move(&self, move_: String) -> Result<()> {
-        let api = ApiWrapper::default();
-        let generation = api.get_generation(&self.game).await?;
-        let move_ = Move::from_name(&api, &move_, generation).await?;
+    async fn run_move(&self, name: String) -> Result<()> {
+        let resource = Resource::Moves.get_resource(&self.api).await?;
+        let move_name = MoveName::try_new(&name, &resource)?;
+
+        let move_ = Move::from_name(&self.api, move_name.get(), self.generation).await?;
         let move_display = MoveDisplay::new(&move_);
 
         printdoc! {
@@ -223,10 +263,11 @@ impl Program {
         Ok(())
     }
 
-    async fn run_ability(&self, ability: String) -> Result<()> {
-        let api = ApiWrapper::default();
-        let generation = api.get_generation(&self.game).await?;
-        let ability = Ability::from_name(&api, &ability, generation).await?;
+    async fn run_ability(&self, name: String) -> Result<()> {
+        let resource = Resource::Abilities.get_resource(&self.api).await?;
+        let ability_name = AbilityName::try_new(&name, &resource)?;
+
+        let ability = Ability::from_name(&self.api, ability_name.get(), self.generation).await?;
         let ability_display = AbilityDisplay::new(&ability);
 
         printdoc! {
@@ -238,16 +279,9 @@ impl Program {
         Ok(())
     }
 
-    async fn run_resource(&self, resource: Resource) -> Result<()> {
-        let api = ApiWrapper::default();
-
-        let resource = match resource {
-            Resource::Pokemon => api.get_all_pokemon().await?.join(" "),
-            Resource::Moves => api.get_all_moves().await?.join(" "),
-            Resource::Abilities => api.get_all_abilities().await?.join(" "),
-            Resource::Types => api.get_all_types().await?.join(" "),
-            Resource::Games => api.get_all_games().await?.join(" "),
-        };
+    async fn run_resource(&self, resource: Resource, newline: bool) -> Result<()> {
+        let delimiter = if newline { "\n" } else { " " };
+        let resource = resource.get_resource(&self.api).await?.join(delimiter);
 
         printdoc! {
             "

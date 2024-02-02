@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use futures::future::join_all;
 
 use crate::api::ApiWrapper;
@@ -360,5 +360,134 @@ pub fn is_stab(type_: &str, pokemon: &PokemonData) -> bool {
         type_ == pokemon.primary_type || type_ == secondary_type
     } else {
         type_ == pokemon.primary_type
+    }
+}
+
+pub trait ResourceName: Sized {
+    fn get_matches(value: &str, resource: &[String]) -> Vec<String> {
+        resource
+            .iter()
+            .filter_map(|r| {
+                if r.contains(value) {
+                    Some(r.clone())
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<String>>()
+    }
+
+    fn validate(value: &str, resource: &[String]) -> ResourceResult {
+        let matches = Self::get_matches(value, resource);
+        if matches.iter().any(|m| *m == value) {
+            ResourceResult::Valid
+        } else {
+            ResourceResult::Invalid(matches)
+        }
+    }
+
+    fn invalid_message(matches: &[String]) -> String {
+        let resource_name = Self::resource_name();
+        if matches.len() > 20 {
+            format!("{resource_name} not found. Potential matches found but there are too many to display.")
+        } else if !matches.is_empty() {
+            format!(
+                "{resource_name} not found. Potential matches: {}.",
+                matches.join(" ")
+            )
+        } else {
+            format!("{resource_name} not found.")
+        }
+    }
+
+    fn try_new(value: &str, resource: &[String]) -> Result<Self> {
+        match Self::validate(value, resource) {
+            ResourceResult::Valid => Ok(Self::from(value.to_string())),
+            ResourceResult::Invalid(matches) => bail!(Self::invalid_message(&matches)),
+        }
+    }
+
+    fn resource_name() -> &'static str;
+    fn from(value: String) -> Self;
+    fn get(&self) -> &str;
+}
+
+pub enum ResourceResult {
+    Valid,
+    Invalid(Vec<String>),
+}
+
+pub struct PokemonName(String);
+impl ResourceName for PokemonName {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+
+    fn get(&self) -> &str {
+        &self.0
+    }
+
+    fn resource_name() -> &'static str {
+        "Pokémon"
+    }
+}
+
+pub struct GameName(String);
+impl ResourceName for GameName {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+
+    fn get(&self) -> &str {
+        &self.0
+    }
+
+    fn resource_name() -> &'static str {
+        "Game"
+    }
+}
+
+pub struct TypeName(String);
+impl ResourceName for TypeName {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+
+    fn get(&self) -> &str {
+        &self.0
+    }
+
+    fn resource_name() -> &'static str {
+        "Type"
+    }
+}
+
+pub struct MoveName(String);
+impl ResourceName for MoveName {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+
+    fn get(&self) -> &str {
+        &self.0
+    }
+
+    fn resource_name() -> &'static str {
+        "Move"
+    }
+}
+
+pub struct AbilityName(String);
+impl ResourceName for AbilityName {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+
+    fn get(&self) -> &str {
+        &self.0
+    }
+
+    fn resource_name() -> &'static str {
+        "Ability"
     }
 }
