@@ -5,7 +5,7 @@ use regex::Regex;
 
 use rustemon::client::RustemonClient;
 use rustemon::games::version_group as rustemon_version;
-use rustemon::moves as rustemon_moves;
+use rustemon::moves::move_ as rustemon_moves;
 use rustemon::pokemon::pokemon_species as rustemon_species;
 use rustemon::pokemon::{
     ability as rustemon_ability, pokemon as rustemon_pokemon, type_ as rustemon_type,
@@ -156,7 +156,7 @@ impl ApiWrapper {
             effect_changes,
             past_values,
             ..
-        } = rustemon_moves::move_::get_by_name(name, &self.client).await?;
+        } = rustemon_moves::get_by_name(name, &self.client).await?;
 
         let RustemonVerboseEffect {
             mut effect,
@@ -257,6 +257,44 @@ impl ApiWrapper {
         let evolution_step = traverse_chain(chain);
 
         Ok(evolution_step)
+    }
+
+    pub async fn get_all_moves(&self) -> Result<Vec<String>> {
+        Ok(rustemon_moves::get_all_entries(&self.client)
+            .await?
+            .into_iter()
+            .map(|p| p.name)
+            .collect::<Vec<String>>())
+    }
+
+    pub async fn get_all_abilities(&self) -> Result<Vec<String>> {
+        Ok(rustemon_ability::get_all_entries(&self.client)
+            .await?
+            .into_iter()
+            .map(|p| p.name)
+            .collect::<Vec<String>>())
+    }
+    pub async fn get_all_games(&self) -> Result<Vec<String>> {
+        Ok(rustemon_version::get_all_entries(&self.client)
+            .await?
+            .into_iter()
+            .map(|p| p.name)
+            .collect::<Vec<String>>())
+    }
+
+    pub async fn get_all_types(&self) -> Result<Vec<String>> {
+        Ok(rustemon_type::get_all_entries(&self.client)
+            .await?
+            .into_iter()
+            .map(|p| p.name)
+            .collect::<Vec<String>>())
+    }
+    pub async fn get_all_pokemon(&self) -> Result<Vec<String>> {
+        Ok(rustemon_pokemon::get_all_entries(&self.client)
+            .await?
+            .into_iter()
+            .map(|p| p.name)
+            .collect::<Vec<String>>())
     }
 
     async fn match_past<T: Past<U>, U>(&self, current_generation: u8, pasts: Vec<T>) -> Option<U> {
