@@ -66,9 +66,9 @@ enum Commands {
         /// Name of the resource
         #[arg(value_enum)]
         resource: Resource,
-        /// Print values in newline instead
-        #[arg(short, long, action = clap::ArgAction::SetTrue)]
-        newline: bool,
+        /// Value to be printed in between values. Defaults to newline
+        #[arg(short, long)]
+        delimiter: Option<String>,
     },
 }
 
@@ -118,9 +118,10 @@ pub async fn run() -> Result<()> {
             attacker,
             stab_only,
         }) => program.run_match(defenders, attacker, stab_only).await?,
-        Some(Commands::Resource { resource, newline }) => {
-            program.run_resource(resource, newline).await?
-        }
+        Some(Commands::Resource {
+            resource,
+            delimiter,
+        }) => program.run_resource(resource, delimiter).await?,
         None => {}
     }
 
@@ -279,9 +280,9 @@ impl Program {
         Ok(())
     }
 
-    async fn run_resource(&self, resource: Resource, newline: bool) -> Result<()> {
-        let delimiter = if newline { "\n" } else { " " };
-        let resource = resource.get_resource(&self.api).await?.join(delimiter);
+    async fn run_resource(&self, resource: Resource, delimiter: Option<String>) -> Result<()> {
+        let delimiter = delimiter.unwrap_or("\n".to_string());
+        let resource = resource.get_resource(&self.api).await?.join(&delimiter);
 
         printdoc! {
             "
