@@ -14,32 +14,48 @@ use display::*;
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
-    #[arg(short, long)]
+    /// Specifies game version to pull data that is specific to a game or generation
+    #[clap(short, long, global = true)]
     game: Option<String>,
 }
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Displays general data about a Pokémon
     Pokemon {
+        /// Name of the Pokémon
         name: String,
+        /// Display all move data the Pokémon is capable of learning
         #[arg(short, long, action = clap::ArgAction::SetTrue)]
         moves: bool,
+        /// Display the Pokémon evolutionary line
         #[arg(short, long, action = clap::ArgAction::SetTrue)]
         evolution: bool,
     },
+    /// Displays matchup data between Pokémon
     Match {
-        defender: String,
+        /// Names of the defending Pokémon; max 6
+        #[arg(required = true, num_args = 1..=6)]
+        defenders: Vec<String>,
+        /// Name of the attacking Pokémon
         attacker: String,
+        /// Display only moves that match the user's type
         #[arg(short, long, action = clap::ArgAction::SetTrue)]
         stab_only: bool,
     },
+    /// Displays data about a Pokémon type
     Type {
+        /// Name of the type
         name: String,
     },
+    /// Displays data about a Pokémon move
     Move {
+        /// Name of the move
         name: String,
     },
+    /// Displays data about a Pokémon ability
     Ability {
+        /// Name of the ability
         name: String,
     },
 }
@@ -59,10 +75,10 @@ pub async fn run() -> Result<()> {
         Some(Commands::Move { name }) => program.run_move(name).await?,
         Some(Commands::Ability { name }) => program.run_ability(name).await?,
         Some(Commands::Match {
-            defender,
+            defenders,
             attacker,
             stab_only,
-        }) => program.run_match(defender, attacker, stab_only).await?,
+        }) => program.run_match(defenders, attacker, stab_only).await?,
         None => {}
     }
 
@@ -143,26 +159,35 @@ impl Program {
         Ok(())
     }
 
-    async fn run_match(&self, defender: String, attacker: String, stab_only: bool) -> Result<()> {
+    async fn run_match(
+        &self,
+        defenders: Vec<String>,
+        attacker: String,
+        stab_only: bool,
+    ) -> Result<()> {
         let api = ApiWrapper::default();
 
-        let defender_data = PokemonData::from_name(&api, &defender, &self.game).await?;
-        let defender_moves = defender_data.get_moves().await?;
-        let defender_chart = defender_data.get_defense_chart().await?;
-        let defender = Pokemon::new(defender_data, defender_chart, defender_moves);
+        for defender in defenders {
+            let defender_data = PokemonData::from_name(&api, &defender, &self.game).await?;
+            let defender_moves = defender_data.get_moves().await?;
+            let defender_chart = defender_data.get_defense_chart().await?;
+            let defender = Pokemon::new(defender_data, defender_chart, defender_moves);
 
-        let attacker_data = PokemonData::from_name(&api, &attacker, &self.game).await?;
-        let attacker_moves = attacker_data.get_moves().await?;
-        let attacker_chart = attacker_data.get_defense_chart().await?;
-        let attacker = Pokemon::new(attacker_data, attacker_chart, attacker_moves);
+            let attacker_data = PokemonData::from_name(&api, &attacker, &self.game).await?;
+            let attacker_moves = attacker_data.get_moves().await?;
+            let attacker_chart = attacker_data.get_defense_chart().await?;
+            let attacker = Pokemon::new(attacker_data, attacker_chart, attacker_moves);
 
-        let match_display = MatchDisplay::new(&defender, &attacker, stab_only);
+            let match_display = MatchDisplay::new(&defender, &attacker, stab_only);
 
-        printdoc! {
-            "
-            {match_display}
-            "
-        };
+            printdoc! {
+                "
+                {match_display}
+
+
+                "
+            };
+        }
 
         Ok(())
     }
