@@ -45,7 +45,7 @@ impl fmt::Display for PokemonDisplay<'_, '_> {
             "{name} {primary_type} {secondary_type}
             {abilities}
             {stats_display}
-            {version}({generation})",
+            {version} gen-{generation}",
             name = self.css.header.style(name),
             secondary_type = secondary_type.as_deref().unwrap_or("")
         }
@@ -76,17 +76,19 @@ impl fmt::Display for StatsDisplay<'_> {
             special_defense,
             speed,
         } = self.stats;
+        let total = hp + attack + defense + special_attack + special_defense + speed;
 
         writedoc! {
             f,
-            "hp    atk   def   satk  sdef  spd
-            {hp:<6}{attack:<6}{defense:<6}{special_attack:<6}{special_defense:<6}{speed:<6}",
+            "hp    atk   def   satk  sdef  spd   total
+            {hp:<6}{attack:<6}{defense:<6}{special_attack:<6}{special_defense:<6}{speed:<6}{total:<6}",
             hp = self.css.accent_red.style(hp),
             attack = self.css.accent_yellow.style(attack),
             defense = self.css.accent_blue.style(defense),
             special_attack = self.css.accent_green.style(special_attack),
             special_defense = self.css.accent_cyan.style(special_defense),
             speed = self.css.accent_violet.style(speed),
+            total = self.css.header.style(total),
         }
     }
 }

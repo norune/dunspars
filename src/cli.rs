@@ -12,8 +12,10 @@ use crate::pokemon::{
 };
 use display::*;
 
+const VERSION: &str = env!("DUNSPARS_VERSION");
+
 #[derive(Parser)]
-#[command(author, version, about, long_about = None)]
+#[command(author, version = VERSION, about, long_about = None)]
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,

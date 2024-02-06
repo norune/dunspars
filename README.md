@@ -1,5 +1,5 @@
 # dunspars
-A command-line interface for Pokémon information pulled from the PokéAPI.
+A command-line interface for Pokémon information pulled from the [PokéAPI](https://pokeapi.co/) via [Rustemon](https://github.com/mlemesle/rustemon).
 
 ## Usage
 ### Pokemon
@@ -8,6 +8,12 @@ View a Pokémon's basic information.
 dunspars pokemon pikachu --evolution --moves
 ```
 The `--evolution` and `--moves` option includes its evolutionary line and learnable moves respectively.
+
+### Game Version
+You can specify a game via the `--game` option in any relevant subcommand.
+```
+dunspars pokemon clefairy --game emerald
+```
 
 ### Match
 View match-up information such as stats and move weaknesses between 1-6 vs 1 Pokémon. The last Pokémon specified will be considered the attacker. 
