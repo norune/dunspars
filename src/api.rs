@@ -38,7 +38,6 @@ pub struct ApiWrapper {
 
 impl ApiWrapper {
     pub fn try_new() -> Result<Self> {
-        let mut client = RustemonClientBuilder::default();
         let mut cache_dir = if let Some(home_dir) = dirs::home_dir() {
             home_dir
         } else {
@@ -47,7 +46,7 @@ impl ApiWrapper {
         cache_dir.push(".cache/dunspars/rustemon");
 
         let cache_manager = CACacheManager { path: cache_dir };
-        client.with_manager(cache_manager);
+        let client = RustemonClientBuilder::default().with_manager(cache_manager);
 
         Ok(Self {
             client: client.try_build()?,
