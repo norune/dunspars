@@ -20,22 +20,23 @@ jobs:
     - name: set_env
       run: |
         RELEASE_TAG=${{github.ref_name}}
-        RELEASE_CONFIG=.cargo/config-release.toml
+        echo "RELEASE_VERSION=${RELEASE_TAG#v}" >> "$GITHUB_ENV"
+        echo "RELEASE_CONFIG=.cargo/config-release.toml" >> "$GITHUB_ENV"
     
     - name: create_config
       run: |
         touch $RELEASE_CONFIG
         echo [env] >> $RELEASE_CONFIG
-        echo DUNSPARS_VERSION=\"${RELEASE_TAG#v}\" >> $RELEASE_CONFIG
+        echo DUNSPARS_VERSION=\"$RELEASE_VERSION\" >> $RELEASE_CONFIG
 
     - name: build
       run: cargo build --config $RELEASE_CONFIG --release --verbose
 
     - name: archive
-      run: tar -czvf dunspars_${RELEASE_TAG#v} /target/release/dunspars README.md LICENSE
+      run: tar -czvf dunspars_$RELEASE_VERSION /target/release/dunspars README.md LICENSE
 
     - name: release
       uses: softprops/action-gh-release@v0.1.15
       with:
-        files: dunspars_${RELEASE_TAG#v}.tar.gz
+        files: dunspars_$RELEASE_VERSION.tar.gz
         fail_on_unmatched_files: true
