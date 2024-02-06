@@ -38,5 +38,5 @@ jobs:
     - name: release
       uses: softprops/action-gh-release@v0.1.15
       with:
-        files: dunspars_$RELEASE_VERSION.tar.gz
+        files: dunspars_*.tar.gz
         fail_on_unmatched_files: true
