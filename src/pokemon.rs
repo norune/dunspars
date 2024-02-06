@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use anyhow::{bail, Result};
 use futures::future::join_all;
+use strsim;
 
 use crate::api::ApiWrapper;
 
@@ -368,7 +369,17 @@ pub trait ResourceName: Sized {
         resource
             .iter()
             .filter_map(|r| {
-                if r.contains(value) {
+                let close_enough = if !r.is_empty() && !value.is_empty() {
+                    let first_r = r.chars().next().unwrap();
+                    let first_value = value.chars().next().unwrap();
+
+                    // Only perform spellcheck on first character match; potentially expensive
+                    first_r == first_value && strsim::levenshtein(r, value) < 4
+                } else {
+                    false
+                };
+
+                if r.contains(value) || close_enough {
                     Some(r.clone())
                 } else {
                     None
@@ -386,24 +397,23 @@ pub trait ResourceName: Sized {
         }
     }
 
-    fn invalid_message(matches: &[String]) -> String {
+    fn invalid_message(value: &str, matches: &[String]) -> String {
         let resource_name = Self::resource_name();
+        let mut message = format!("{resource_name} '{value}' not found.");
+
         if matches.len() > 20 {
-            format!("{resource_name} not found. Potential matches found but there are too many to display.")
+            message += " Potential matches found; too many to display.";
         } else if !matches.is_empty() {
-            format!(
-                "{resource_name} not found. Potential matches: {}.",
-                matches.join(" ")
-            )
-        } else {
-            format!("{resource_name} not found.")
+            message += &format!(" Potential matches: {}.", matches.join(" "));
         }
+
+        message
     }
 
     fn try_new(value: &str, resource: &[String]) -> Result<Self> {
         match Self::validate(value, resource) {
             ResourceResult::Valid => Ok(Self::from(value.to_string())),
-            ResourceResult::Invalid(matches) => bail!(Self::invalid_message(&matches)),
+            ResourceResult::Invalid(matches) => bail!(Self::invalid_message(value, &matches)),
         }
     }
 
