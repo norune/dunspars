@@ -5,7 +5,8 @@ description = "CLI using the PokéAPI."
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[profile.release]
+strip = "debuginfo"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
@@ -18,3 +19,4 @@ owo-colors = "4.0.0"
 futures = "0.3.30"
 indoc = "2.0.4"
 regex = "1.10.3"
+dirs = "5.0.1"

@@ -95,7 +95,7 @@ impl Resource {
 
 pub async fn run() -> Result<()> {
     let cli = Cli::parse();
-    let api = ApiWrapper::default();
+    let api = ApiWrapper::try_new()?;
 
     let game_resource = Resource::Games.get_resource(&api).await?;
     let game_name = cli.game.unwrap_or("scarlet-violet".to_string());

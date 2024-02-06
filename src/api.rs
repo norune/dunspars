@@ -1,9 +1,11 @@
 use std::collections::HashMap;
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use regex::Regex;
 
-use rustemon::client::RustemonClient;
+use dirs;
+
+use rustemon::client::{CACacheManager, RustemonClient, RustemonClientBuilder};
 use rustemon::games::version_group as rustemon_version;
 use rustemon::moves::move_ as rustemon_moves;
 use rustemon::pokemon::pokemon_species as rustemon_species;
@@ -30,9 +32,27 @@ use crate::pokemon::{
     Ability, EvolutionMethod, EvolutionStep, Move, PokemonData, Stats, Type, TypeChart,
 };
 
-#[derive(Default)]
 pub struct ApiWrapper {
     client: RustemonClient,
+}
+
+impl ApiWrapper {
+    pub fn try_new() -> Result<Self> {
+        let mut client = RustemonClientBuilder::default();
+        let mut cache_dir = if let Some(home_dir) = dirs::home_dir() {
+            home_dir
+        } else {
+            bail!("Home directory not found")
+        };
+        cache_dir.push(".cache/dunspars/rustemon");
+
+        let cache_manager = CACacheManager { path: cache_dir };
+        client.with_manager(cache_manager);
+
+        Ok(Self {
+            client: client.try_build()?,
+        })
+    }
 }
 
 impl ApiWrapper {

@@ -34,7 +34,7 @@ View the effects of a Pokémon ability.
 dunspars ability intimidate
 ```
 
-### To View All Options
+### Help
 ```
 dunspars --help
 ```
