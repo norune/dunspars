@@ -5,7 +5,9 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use indoc::printdoc;
 
-use crate::api::ApiWrapper;
+use crate::api::{
+    get_all_abilities, get_all_games, get_all_moves, get_all_pokemon, get_all_types, ApiWrapper,
+};
 use crate::pokemon::{
     Ability, AbilityName, GameName, Move, MoveName, Pokemon, PokemonData, PokemonName,
     ResourceName, Type, TypeName,
@@ -86,23 +88,23 @@ pub enum Resource {
 impl Resource {
     async fn get_resource(&self, api: &ApiWrapper) -> Result<Vec<String>> {
         match self {
-            Resource::Pokemon => Ok(api.get_all_pokemon().await?),
-            Resource::Moves => Ok(api.get_all_moves().await?),
-            Resource::Abilities => Ok(api.get_all_abilities().await?),
-            Resource::Types => Ok(api.get_all_types().await?),
-            Resource::Games => Ok(api.get_all_games().await?),
+            Resource::Pokemon => Ok(get_all_pokemon(&api.client).await?),
+            Resource::Moves => Ok(get_all_moves(&api.client).await?),
+            Resource::Abilities => Ok(get_all_abilities(&api.client).await?),
+            Resource::Types => Ok(get_all_types(&api.client).await?),
+            Resource::Games => Ok(get_all_games(&api.client).await?),
         }
     }
 }
 
 pub async fn run() -> Result<()> {
     let cli = Cli::parse();
-    let api = ApiWrapper::try_new()?;
+    let api = ApiWrapper::try_new().await?;
 
     let game_resource = Resource::Games.get_resource(&api).await?;
     let game_name = cli.game.unwrap_or("scarlet-violet".to_string());
     let game = GameName::try_new(&game_name, &game_resource)?;
-    let generation = api.get_generation(game.get()).await?;
+    let generation = api.get_generation(game.get());
 
     let program = Program::new(game, generation, api);
 
@@ -221,6 +223,15 @@ impl Program {
     ) -> Result<()> {
         let resource = Resource::Pokemon.get_resource(&self.api).await?;
 
+        let attacker_name = PokemonName::try_new(&attacker_name, &resource)?;
+        let attacker_data =
+            PokemonData::from_name(&self.api, attacker_name.get(), self.game.get()).await?;
+        let attacker_moves = attacker_data.get_moves().await?;
+        let attacker_chart = attacker_data.get_defense_chart().await?;
+        let attacker = Pokemon::new(attacker_data, attacker_chart, attacker_moves);
+
+        let mut defenders = vec![];
+
         for defender_name in defender_names {
             let defender_name = PokemonName::try_new(&defender_name, &resource)?;
             let defender_data =
@@ -229,15 +240,11 @@ impl Program {
             let defender_chart = defender_data.get_defense_chart().await?;
             let defender = Pokemon::new(defender_data, defender_chart, defender_moves);
 
-            let attacker_name = PokemonName::try_new(&attacker_name, &resource)?;
-            let attacker_data =
-                PokemonData::from_name(&self.api, attacker_name.get(), self.game.get()).await?;
-            let attacker_moves = attacker_data.get_moves().await?;
-            let attacker_chart = attacker_data.get_defense_chart().await?;
-            let attacker = Pokemon::new(attacker_data, attacker_chart, attacker_moves);
+            defenders.push(defender);
+        }
 
+        for defender in defenders {
             let match_display = MatchDisplay::new(&defender, &attacker, stab_only);
-
             printdoc! {
                 "
                 {match_display}

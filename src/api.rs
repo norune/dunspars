@@ -22,9 +22,11 @@ use rustemon::model::games::VersionGroup as RustemonVersion;
 use rustemon::model::moves::{Move as RustemonMove, PastMoveStatValues as RustemonPastMoveStats};
 use rustemon::model::pokemon::{
     Ability as RustemonAbility, AbilityEffectChange as RustemonPastAbilityEffect,
-    Pokemon as RustemonPokemon, PokemonStat as RustemonStat, PokemonType as RustemonTypeSlot,
-    PokemonTypePast as RustemonPastPokemonType, Type as RustemonType,
-    TypeRelations as RustemonTypeRelations, TypeRelationsPast as RustemonPastTypeRelations,
+    Pokemon as RustemonPokemon, PokemonAbility as RustemonPokemonAbility,
+    PokemonMove as RustemonPokemonMove, PokemonStat as RustemonStat,
+    PokemonType as RustemonTypeSlot, PokemonTypePast as RustemonPastPokemonType,
+    Type as RustemonType, TypeRelations as RustemonTypeRelations,
+    TypeRelationsPast as RustemonPastTypeRelations,
 };
 use rustemon::model::resource::{Effect as RustemonEffect, VerboseEffect as RustemonVerboseEffect};
 
@@ -33,11 +35,13 @@ use crate::pokemon::{
 };
 
 pub struct ApiWrapper {
-    client: RustemonClient,
+    pub client: RustemonClient,
+    gen_map: HashMap<String, u8>,
+    gen_regex: Regex,
 }
 
 impl ApiWrapper {
-    pub fn try_new() -> Result<Self> {
+    pub async fn try_new() -> Result<Self> {
         let mut cache_dir = if let Some(home_dir) = dirs::home_dir() {
             home_dir
         } else {
@@ -46,15 +50,20 @@ impl ApiWrapper {
         cache_dir.push(".cache/dunspars/rustemon");
 
         let cache_manager = CACacheManager { path: cache_dir };
-        let client = RustemonClientBuilder::default().with_manager(cache_manager);
+        let client = RustemonClientBuilder::default()
+            .with_manager(cache_manager)
+            .try_build()?;
+
+        let gen_regex = Regex::new(r"generation/(?P<gen>\d+)/?$").unwrap();
+        let gen_map = build_gen_map(&client, &gen_regex).await?;
 
         Ok(Self {
-            client: client.try_build()?,
+            client,
+            gen_map,
+            gen_regex,
         })
     }
-}
 
-impl ApiWrapper {
     pub async fn get_pokemon(&self, pokemon: &str, game: &str) -> Result<PokemonData> {
         let RustemonPokemon {
             name,
@@ -66,42 +75,14 @@ impl ApiWrapper {
             species,
             ..
         } = rustemon_pokemon::get_by_name(pokemon, &self.client).await?;
-        let generation = self.get_generation(game).await?;
+        let generation = self.get_generation(game);
 
-        let pokemon_types = self
-            .match_past(generation, past_types)
-            .await
-            .unwrap_or(types);
-        let primary_type = pokemon_types
-            .iter()
-            .find(|t| t.slot == 1)
-            .unwrap()
-            .type_
-            .name
-            .clone();
-        let secondary_type = pokemon_types
-            .iter()
-            .find(|t| t.slot == 2)
-            .map(|t| t.type_.name.clone());
+        let (primary_type, secondary_type) =
+            self.get_pokemon_type(types, past_types, generation).await?;
 
-        let mut learn_moves = HashMap::new();
-        moves.iter().for_each(|mv| {
-            let version_group = mv
-                .version_group_details
-                .iter()
-                .find(|vg| vg.version_group.name == game);
-            if let Some(vg) = version_group {
-                learn_moves.insert(
-                    mv.move_.name.clone(),
-                    (vg.move_learn_method.name.clone(), vg.level_learned_at),
-                );
-            }
-        });
+        let learn_moves = self.get_pokemon_moves(moves, game).await?;
 
-        let abilities = abilities
-            .iter()
-            .map(|a| (a.ability.name.clone(), a.is_hidden))
-            .collect::<Vec<_>>();
+        let abilities = self.get_pokemon_abilities(abilities);
 
         Ok(PokemonData {
             name,
@@ -115,6 +96,61 @@ impl ApiWrapper {
             generation,
             api: self,
         })
+    }
+
+    async fn get_pokemon_type(
+        &self,
+        types: Vec<RustemonTypeSlot>,
+        past_types: Vec<RustemonPastPokemonType>,
+        generation: u8,
+    ) -> Result<(String, Option<String>)> {
+        let pokemon_types = self
+            .match_past(generation, past_types)
+            .await
+            .unwrap_or(types);
+
+        let primary_type = pokemon_types
+            .iter()
+            .find(|t| t.slot == 1)
+            .unwrap()
+            .type_
+            .name
+            .clone();
+        let secondary_type = pokemon_types
+            .iter()
+            .find(|t| t.slot == 2)
+            .map(|t| t.type_.name.clone());
+
+        Ok((primary_type, secondary_type))
+    }
+
+    async fn get_pokemon_moves(
+        &self,
+        moves: Vec<RustemonPokemonMove>,
+        game: &str,
+    ) -> Result<HashMap<String, (String, i64)>> {
+        let mut learn_moves = HashMap::new();
+        for move_ in moves {
+            let version_group = move_
+                .version_group_details
+                .iter()
+                .find(|vg| vg.version_group.name == game);
+
+            if let Some(vg) = version_group {
+                learn_moves.insert(
+                    move_.move_.name.clone(),
+                    (vg.move_learn_method.name.clone(), vg.level_learned_at),
+                );
+            }
+        }
+        Ok(learn_moves)
+    }
+
+    fn get_pokemon_abilities(&self, abilities: Vec<RustemonPokemonAbility>) -> Vec<(String, bool)> {
+        abilities
+            .iter()
+            .map(|a| (a.ability.name.clone(), a.is_hidden))
+            .collect::<Vec<_>>()
     }
 
     pub async fn get_type(&self, type_str: &str, generation: u8) -> Result<Type> {
@@ -259,11 +295,8 @@ impl ApiWrapper {
         })
     }
 
-    pub async fn get_generation(&self, game: &str) -> Result<u8> {
-        let RustemonVersion { generation, .. } =
-            rustemon_version::get_by_name(game, &self.client).await?;
-
-        extract_gen_from_url(&generation.url)
+    pub fn get_generation(&self, game: &str) -> u8 {
+        *self.gen_map.get(game).unwrap()
     }
 
     pub async fn get_evolution_steps(&self, species: &str) -> Result<EvolutionStep> {
@@ -276,44 +309,6 @@ impl ApiWrapper {
         let evolution_step = traverse_chain(chain);
 
         Ok(evolution_step)
-    }
-
-    pub async fn get_all_moves(&self) -> Result<Vec<String>> {
-        Ok(rustemon_moves::get_all_entries(&self.client)
-            .await?
-            .into_iter()
-            .map(|p| p.name)
-            .collect::<Vec<String>>())
-    }
-
-    pub async fn get_all_abilities(&self) -> Result<Vec<String>> {
-        Ok(rustemon_ability::get_all_entries(&self.client)
-            .await?
-            .into_iter()
-            .map(|p| p.name)
-            .collect::<Vec<String>>())
-    }
-    pub async fn get_all_games(&self) -> Result<Vec<String>> {
-        Ok(rustemon_version::get_all_entries(&self.client)
-            .await?
-            .into_iter()
-            .map(|p| p.name)
-            .collect::<Vec<String>>())
-    }
-
-    pub async fn get_all_types(&self) -> Result<Vec<String>> {
-        Ok(rustemon_type::get_all_entries(&self.client)
-            .await?
-            .into_iter()
-            .map(|p| p.name)
-            .collect::<Vec<String>>())
-    }
-    pub async fn get_all_pokemon(&self) -> Result<Vec<String>> {
-        Ok(rustemon_pokemon::get_all_entries(&self.client)
-            .await?
-            .into_iter()
-            .map(|p| p.name)
-            .collect::<Vec<String>>())
     }
 
     async fn match_past<T: Past<U>, U>(&self, current_generation: u8, pasts: Vec<T>) -> Option<U> {
@@ -330,6 +325,61 @@ impl ApiWrapper {
 
         oldest_value
     }
+}
+
+pub async fn get_all_pokemon(client: &RustemonClient) -> Result<Vec<String>> {
+    Ok(rustemon_pokemon::get_all_entries(client)
+        .await?
+        .into_iter()
+        .map(|p| p.name)
+        .collect::<Vec<String>>())
+}
+
+pub async fn get_all_types(client: &RustemonClient) -> Result<Vec<String>> {
+    Ok(rustemon_type::get_all_entries(client)
+        .await?
+        .into_iter()
+        .map(|p| p.name)
+        .collect::<Vec<String>>())
+}
+
+pub async fn get_all_moves(client: &RustemonClient) -> Result<Vec<String>> {
+    Ok(rustemon_moves::get_all_entries(client)
+        .await?
+        .into_iter()
+        .map(|p| p.name)
+        .collect::<Vec<String>>())
+}
+
+pub async fn get_all_abilities(client: &RustemonClient) -> Result<Vec<String>> {
+    Ok(rustemon_ability::get_all_entries(client)
+        .await?
+        .into_iter()
+        .map(|p| p.name)
+        .collect::<Vec<String>>())
+}
+
+pub async fn get_all_games(client: &RustemonClient) -> Result<Vec<String>> {
+    Ok(rustemon_version::get_all_entries(client)
+        .await?
+        .into_iter()
+        .map(|p| p.name)
+        .collect::<Vec<String>>())
+}
+
+async fn build_gen_map(client: &RustemonClient, gen_regex: &Regex) -> Result<HashMap<String, u8>> {
+    let mut gen_map = HashMap::new();
+    let games = get_all_games(client).await?;
+
+    for game in games {
+        let RustemonVersion { generation, .. } =
+            rustemon_version::get_by_name(&game, client).await?;
+
+        let generation = extract_gen_from_url(gen_regex, &generation.url);
+        gen_map.insert(game, generation);
+    }
+
+    Ok(gen_map)
 }
 
 fn traverse_chain(chain_link: RustemonEvoStep) -> EvolutionStep {
@@ -409,11 +459,9 @@ fn convert_to_evolution_method(evolution: RustemonEvoMethod) -> EvolutionMethod 
     method
 }
 
-fn extract_gen_from_url(url: &str) -> Result<u8> {
-    let gen_url_regex = Regex::new(r"generation/(?P<gen>\d+)/?$").unwrap();
-    let caps = gen_url_regex.captures(url).unwrap();
-    let generation = caps["gen"].parse::<u8>()?;
-    Ok(generation)
+fn extract_gen_from_url(regex: &Regex, url: &str) -> u8 {
+    let caps = regex.captures(url).unwrap();
+    caps["gen"].parse::<u8>().unwrap()
 }
 
 fn extract_stats(stats_vec: Vec<RustemonStat>) -> Stats {
@@ -443,8 +491,8 @@ trait Past<T> {
 }
 
 impl Past<Vec<RustemonTypeSlot>> for RustemonPastPokemonType {
-    async fn generation(&self, _api: &ApiWrapper) -> u8 {
-        extract_gen_from_url(&self.generation.url).unwrap()
+    async fn generation(&self, api: &ApiWrapper) -> u8 {
+        extract_gen_from_url(&api.gen_regex, &self.generation.url)
     }
 
     fn value(self) -> Vec<RustemonTypeSlot> {
@@ -453,8 +501,8 @@ impl Past<Vec<RustemonTypeSlot>> for RustemonPastPokemonType {
 }
 
 impl Past<RustemonTypeRelations> for RustemonPastTypeRelations {
-    async fn generation(&self, _api: &ApiWrapper) -> u8 {
-        extract_gen_from_url(&self.generation.url).unwrap()
+    async fn generation(&self, api: &ApiWrapper) -> u8 {
+        extract_gen_from_url(&api.gen_regex, &self.generation.url)
     }
 
     fn value(self) -> RustemonTypeRelations {
@@ -464,7 +512,7 @@ impl Past<RustemonTypeRelations> for RustemonPastTypeRelations {
 
 impl Past<RustemonPastMoveStats> for RustemonPastMoveStats {
     async fn generation(&self, api: &ApiWrapper) -> u8 {
-        api.get_generation(&self.version_group.name).await.unwrap() - 1
+        api.get_generation(&self.version_group.name) - 1
     }
 
     fn value(self) -> RustemonPastMoveStats {
@@ -474,7 +522,7 @@ impl Past<RustemonPastMoveStats> for RustemonPastMoveStats {
 
 impl Past<Vec<RustemonEffect>> for RustemonPastAbilityEffect {
     async fn generation(&self, api: &ApiWrapper) -> u8 {
-        api.get_generation(&self.version_group.name).await.unwrap() - 1
+        api.get_generation(&self.version_group.name) - 1
     }
 
     fn value(self) -> Vec<RustemonEffect> {
