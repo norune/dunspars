@@ -90,9 +90,11 @@ impl ApiWrapper {
 
         let current_generation = get_gen_from_game(game, &self.gen_map);
         let learn_moves = self.get_pokemon_moves(moves, current_generation);
+        // PokéAPI doesn't seem to supply a field that denotes when a Pokémon was introduced.
+        // So the next best thing is to check if they have any moves in the specified generation.
         if learn_moves.is_empty() {
             bail!(format!(
-                "Pokémon '{pokemon}' is not present in game '{game}'"
+                "Pokémon '{pokemon}' is not present in generation {current_generation}"
             ))
         }
 
