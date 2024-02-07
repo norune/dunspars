@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
 use anyhow::{bail, Result};
-use futures::future::join_all;
+use futures::stream::FuturesUnordered;
+use futures::StreamExt;
 use strsim;
 
 use crate::api::ApiWrapper;
@@ -41,12 +42,12 @@ impl<'a> PokemonData<'a> {
     }
 
     pub async fn get_moves(&self) -> Result<MoveList<'a>> {
-        let moves_futures = self
+        let moves_futures: FuturesUnordered<_> = self
             .learn_moves
             .iter()
             .map(|mv| Move::from_name(self.api, mv.0, self.generation))
-            .collect::<Vec<_>>();
-        let moves_results = join_all(moves_futures).await;
+            .collect();
+        let moves_results: Vec<_> = moves_futures.collect().await;
 
         let mut moves = HashMap::new();
         for result in moves_results {
@@ -184,7 +185,7 @@ impl<'a> MoveList<'a> {
         MoveList { value: hashmap }
     }
 
-    pub fn get_value(&self) -> &HashMap<String, Move<'a>> {
+    pub fn get_map(&self) -> &HashMap<String, Move<'a>> {
         &self.value
     }
 }

@@ -237,7 +237,7 @@ impl<'a, 'b, 'c> MatchDisplay<'a, 'b, 'c> {
         defender: &'a Pokemon,
         attacker: &'b Pokemon,
     ) -> WeaknessGroups<&Move<'_>> {
-        WeaknessGroups::new(attacker.move_list.get_value(), |move_| {
+        WeaknessGroups::new(attacker.move_list.get_map(), |move_| {
             let stab_qualified =
                 !self.stab_only || pokemon::is_stab(&move_.1.type_, &attacker.data);
             if move_.1.damage_class != "status" && stab_qualified {
@@ -352,8 +352,13 @@ pub struct MoveListDisplay<'a, 'b, 'c> {
 impl fmt::Display for MoveListDisplay<'_, '_, '_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.css.header.style("moves"))?;
+        let move_list = self.move_list.get_map();
 
-        for move_ in self.move_list.get_value() {
+        if move_list.is_empty() {
+            write!(f, "There are no moves to display.")?;
+        }
+
+        for move_ in move_list {
             let Move {
                 name,
                 accuracy,
@@ -495,6 +500,7 @@ pub struct EvolutionStepDisplay<'a> {
 
 impl fmt::Display for EvolutionStepDisplay<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(f, "{}", self.css.header.style("evolution"))?;
         self.traverse_dfs(f, self.evolution_step, 0)?;
         Ok(())
     }
@@ -534,7 +540,7 @@ impl<'a> EvolutionStepDisplay<'a> {
             f,
             "{indentation}{species} {methods}",
             indentation = "  ".repeat(depth),
-            species = self.css.header.style(&step.name),
+            species = self.css.accent_green.style(&step.name),
         )
     }
 

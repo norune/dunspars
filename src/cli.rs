@@ -6,7 +6,8 @@ use clap::{Parser, Subcommand};
 use indoc::printdoc;
 
 use crate::api::{
-    get_all_abilities, get_all_games, get_all_moves, get_all_pokemon, get_all_types, ApiWrapper,
+    get_all_abilities, get_all_games, get_all_moves, get_all_pokemon, get_all_types,
+    get_gen_from_game, ApiWrapper,
 };
 use crate::pokemon::{
     Ability, AbilityName, GameName, Move, MoveName, Pokemon, PokemonData, PokemonName,
@@ -74,10 +75,21 @@ enum Commands {
         #[arg(short, long)]
         delimiter: Option<String>,
     },
+    /// Actions regarding the program's cache
+    Cache {
+        /// Action to undertake
+        #[arg(value_enum)]
+        action: CacheAction,
+    },
 }
 
 #[derive(Clone, clap::ValueEnum)]
-pub enum Resource {
+enum CacheAction {
+    Clear,
+}
+
+#[derive(Clone, clap::ValueEnum)]
+enum Resource {
     Pokemon,
     Moves,
     Abilities,
@@ -102,9 +114,12 @@ pub async fn run() -> Result<()> {
     let api = ApiWrapper::try_new().await?;
 
     let game_resource = Resource::Games.get_resource(&api).await?;
-    let game_name = cli.game.unwrap_or("scarlet-violet".to_string());
+    // Default to the latest game
+    let game_name = cli
+        .game
+        .unwrap_or(game_resource.last().unwrap().to_string());
     let game = GameName::try_new(&game_name, &game_resource)?;
-    let generation = api.get_generation(game.get());
+    let generation = get_gen_from_game(game.get(), &api.gen_map);
 
     let program = Program::new(game, generation, api);
 
@@ -126,6 +141,7 @@ pub async fn run() -> Result<()> {
             resource,
             delimiter,
         }) => program.run_resource(resource, delimiter).await?,
+        Some(Commands::Cache { action }) => program.run_cache(action).await?,
         None => {}
     }
 
@@ -300,5 +316,11 @@ impl Program {
         };
 
         Ok(())
+    }
+
+    async fn run_cache(&self, action: CacheAction) -> Result<()> {
+        match action {
+            CacheAction::Clear => self.api.clear_cache().await,
+        }
     }
 }
