@@ -355,7 +355,7 @@ impl fmt::Display for MoveListDisplay<'_, '_, '_> {
         let move_list = self.move_list.get_map();
 
         if move_list.is_empty() {
-            write!(f, "There are no moves to display.")?;
+            write!(f, "\nThere are no moves to display.\n")?;
         }
 
         for move_ in move_list {

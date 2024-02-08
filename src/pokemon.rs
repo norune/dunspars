@@ -412,9 +412,10 @@ pub trait ResourceName: Sized {
     }
 
     fn try_new(value: &str, resource: &[String]) -> Result<Self> {
-        match Self::validate(value, resource) {
-            ResourceResult::Valid => Ok(Self::from(value.to_string())),
-            ResourceResult::Invalid(matches) => bail!(Self::invalid_message(value, &matches)),
+        let value = value.to_lowercase();
+        match Self::validate(&value, resource) {
+            ResourceResult::Valid => Ok(Self::from(value)),
+            ResourceResult::Invalid(matches) => bail!(Self::invalid_message(&value, &matches)),
         }
     }
 

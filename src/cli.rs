@@ -21,7 +21,7 @@ const VERSION: &str = env!("DUNSPARS_VERSION");
 #[command(author, version = VERSION, about, long_about = None)]
 struct Cli {
     #[command(subcommand)]
-    command: Option<Commands>,
+    command: Commands,
     /// Specifies game version to pull data that is specific to a game or generation
     #[clap(short, long, global = true)]
     game: Option<String>,
@@ -124,25 +124,24 @@ pub async fn run() -> Result<()> {
     let program = Program::new(game, generation, api);
 
     match cli.command {
-        Some(Commands::Pokemon {
+        Commands::Pokemon {
             pokemon,
             moves,
             evolution,
-        }) => program.run_pokemon(pokemon, moves, evolution).await?,
-        Some(Commands::Type { type_ }) => program.run_type(type_).await?,
-        Some(Commands::Move { move_ }) => program.run_move(move_).await?,
-        Some(Commands::Ability { ability }) => program.run_ability(ability).await?,
-        Some(Commands::Match {
+        } => program.run_pokemon(pokemon, moves, evolution).await?,
+        Commands::Type { type_ } => program.run_type(type_).await?,
+        Commands::Move { move_ } => program.run_move(move_).await?,
+        Commands::Ability { ability } => program.run_ability(ability).await?,
+        Commands::Match {
             defenders,
             attacker,
             stab_only,
-        }) => program.run_match(defenders, attacker, stab_only).await?,
-        Some(Commands::Resource {
+        } => program.run_match(defenders, attacker, stab_only).await?,
+        Commands::Resource {
             resource,
             delimiter,
-        }) => program.run_resource(resource, delimiter).await?,
-        Some(Commands::Cache { action }) => program.run_cache(action).await?,
-        None => {}
+        } => program.run_resource(resource, delimiter).await?,
+        Commands::Cache { action } => program.run_cache(action).await?,
     }
 
     Ok(())
