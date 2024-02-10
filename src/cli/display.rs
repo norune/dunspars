@@ -1,9 +1,8 @@
 use std::fmt;
 
 use indoc::{formatdoc, writedoc};
-use owo_colors::Style;
 
-use crate::cli::utils::{StyleSheet, WeaknessGroups};
+use crate::cli::utils::{is_color_enabled, Colors, DisplayComponent, Effects, WeaknessGroups};
 use crate::pokemon::{
     self, Ability, EvolutionMethod, EvolutionStep, Move, MoveList, Pokemon, PokemonData, Stats,
     TypeChart,
@@ -11,7 +10,13 @@ use crate::pokemon::{
 
 pub struct PokemonDisplay<'a, 'b> {
     pokemon: &'a PokemonData<'b>,
-    css: StyleSheet,
+    color_enabled: bool,
+}
+
+impl DisplayComponent for PokemonDisplay<'_, '_> {
+    fn color_enabled(&self) -> bool {
+        self.color_enabled
+    }
 }
 
 impl fmt::Display for PokemonDisplay<'_, '_> {
@@ -42,11 +47,11 @@ impl fmt::Display for PokemonDisplay<'_, '_> {
 
         writedoc! {
             f,
-            "{name} {primary_type} {secondary_type}
+            "{header}{name}{header:#} {primary_type} {secondary_type}
             {abilities}
             {stats_display}
             {version} gen-{generation}",
-            name = self.css.header.style(name),
+            header = self.fg_effect(Colors::Header, Effects::Bold),
             secondary_type = secondary_type.as_deref().unwrap_or("")
         }
     }
@@ -56,14 +61,20 @@ impl<'a, 'b> PokemonDisplay<'a, 'b> {
     pub fn new(pokemon: &'a PokemonData<'b>) -> Self {
         Self {
             pokemon,
-            css: StyleSheet::default(),
+            color_enabled: is_color_enabled(),
         }
     }
 }
 
 pub struct StatsDisplay<'a> {
     stats: &'a Stats,
-    css: StyleSheet,
+    color_enabled: bool,
+}
+
+impl DisplayComponent for StatsDisplay<'_> {
+    fn color_enabled(&self) -> bool {
+        self.color_enabled
+    }
 }
 
 impl fmt::Display for StatsDisplay<'_> {
@@ -81,14 +92,15 @@ impl fmt::Display for StatsDisplay<'_> {
         writedoc! {
             f,
             "hp    atk   def   satk  sdef  spd   total
-            {hp:<6}{attack:<6}{defense:<6}{special_attack:<6}{special_defense:<6}{speed:<6}{total:<6}",
-            hp = self.css.accent_red.style(hp),
-            attack = self.css.accent_yellow.style(attack),
-            defense = self.css.accent_blue.style(defense),
-            special_attack = self.css.accent_green.style(special_attack),
-            special_defense = self.css.accent_cyan.style(special_defense),
-            speed = self.css.accent_violet.style(speed),
-            total = self.css.header.style(total),
+            {red}{hp:<6}{yellow}{attack:<6}{blue}{defense:<6}{green}{special_attack:<6}\
+            {cyan}{special_defense:<6}{violet}{speed:<6}{header}{total:<6}{header:#}",
+            red = self.fg(Colors::Red),
+            yellow = self.fg(Colors::Yellow),
+            blue = self.fg(Colors::Blue),
+            green = self.fg(Colors::Green),
+            cyan = self.fg(Colors::Cyan),
+            violet = self.fg(Colors::Violet),
+            header = self.fg_effect(Colors::Header, Effects::Bold),
         }
     }
 }
@@ -97,7 +109,7 @@ impl<'a> StatsDisplay<'a> {
     pub fn new(stats: &'a Stats) -> Self {
         Self {
             stats,
-            css: StyleSheet::default(),
+            color_enabled: is_color_enabled(),
         }
     }
 }
@@ -105,7 +117,13 @@ impl<'a> StatsDisplay<'a> {
 pub struct TypeChartDisplay<'a> {
     type_chart: &'a TypeChart,
     label: &'static str,
-    css: StyleSheet,
+    color_enabled: bool,
+}
+
+impl DisplayComponent for TypeChartDisplay<'_> {
+    fn color_enabled(&self) -> bool {
+        self.color_enabled
+    }
 }
 
 impl fmt::Display for TypeChartDisplay<'_> {
@@ -116,18 +134,19 @@ impl fmt::Display for TypeChartDisplay<'_> {
 
         writedoc! {
             f,
-            "{header}{type_chart}",
-            header = self.css.header.style(self.label)
+            "{header}{label}{header:#}{type_chart}",
+            header = self.fg_effect(Colors::Header, Effects::Bold),
+            label = self.label,
         }
     }
 }
 
 impl<'a> TypeChartDisplay<'a> {
     pub fn new(type_chart: &'a TypeChart, label: &'static str) -> Self {
-        TypeChartDisplay {
+        Self {
             type_chart,
             label,
-            css: StyleSheet::default(),
+            color_enabled: is_color_enabled(),
         }
     }
 
@@ -141,25 +160,25 @@ impl<'a> TypeChartDisplay<'a> {
         let mut other = String::from("");
 
         if !weakness_groups.quad.is_empty() {
-            quad = self.format_group("quad", weakness_groups.quad, self.css.accent_red);
+            quad = self.format_group("quad", weakness_groups.quad, Colors::Red);
         }
         if !weakness_groups.double.is_empty() {
-            double = self.format_group("double", weakness_groups.double, self.css.accent_yellow);
+            double = self.format_group("double", weakness_groups.double, Colors::Yellow);
         }
         if !weakness_groups.neutral.is_empty() {
-            neutral = self.format_group("neutral", weakness_groups.neutral, self.css.accent_green);
+            neutral = self.format_group("neutral", weakness_groups.neutral, Colors::Green);
         }
         if !weakness_groups.half.is_empty() {
-            half = self.format_group("half", weakness_groups.half, self.css.accent_blue);
+            half = self.format_group("half", weakness_groups.half, Colors::Blue);
         }
         if !weakness_groups.quarter.is_empty() {
-            quarter = self.format_group("quarter", weakness_groups.quarter, self.css.accent_cyan);
+            quarter = self.format_group("quarter", weakness_groups.quarter, Colors::Cyan);
         }
         if !weakness_groups.zero.is_empty() {
-            zero = self.format_group("zero", weakness_groups.zero, self.css.accent_violet);
+            zero = self.format_group("zero", weakness_groups.zero, Colors::Violet);
         }
         if !weakness_groups.other.is_empty() {
-            other = self.format_group("other", weakness_groups.other, self.css.accent_green);
+            other = self.format_group("other", weakness_groups.other, Colors::Green);
         }
 
         formatdoc! {
@@ -167,8 +186,9 @@ impl<'a> TypeChartDisplay<'a> {
         }
     }
 
-    fn format_group(&self, label: &'static str, types: Vec<String>, group_style: Style) -> String {
-        format!("\n{label}: {}", group_style.style(types.join(" ")))
+    fn format_group(&self, label: &'static str, types: Vec<String>, color: Colors) -> String {
+        let style = self.fg(color);
+        format!("\n{label}: {style}{}{style:#}", types.join(" "))
     }
 }
 
@@ -176,7 +196,13 @@ pub struct MatchDisplay<'a, 'b, 'c> {
     defender: &'a Pokemon<'c>,
     attacker: &'b Pokemon<'c>,
     stab_only: bool,
-    css: StyleSheet,
+    color_enabled: bool,
+}
+
+impl DisplayComponent for MatchDisplay<'_, '_, '_> {
+    fn color_enabled(&self) -> bool {
+        self.color_enabled
+    }
 }
 
 impl fmt::Display for MatchDisplay<'_, '_, '_> {
@@ -202,22 +228,21 @@ impl fmt::Display for MatchDisplay<'_, '_, '_> {
 
         writedoc! {
             f,
-            "{defender_header} {defender_primary_type} {defender_secondary_type}
+            "{header}{defender_header}{header:#} {defender_primary_type} {defender_secondary_type}
             {defender_stats}
-            {attacker_header} {attacker_primary_type} {attacker_secondary_type}
+            {header}{attacker_header}{header:#} {attacker_primary_type} {attacker_secondary_type}
             {attacker_stats}
 
-            {defender_moves_header}{defender_weaknesses}
+            {header}{defender_moves_header}{header:#}{defender_weaknesses}
 
-            {attacker_moves_header}{attacker_weaknesses}",
-            defender_header = self.css.header.style(&self.defender.data.name),
+            {header}{attacker_moves_header}{header:#}{attacker_weaknesses}",
+            defender_header = &self.defender.data.name,
             defender_primary_type = self.defender.data.primary_type,
             defender_secondary_type = self.defender.data.secondary_type.as_deref().unwrap_or(""),
-            attacker_header = self.css.header.style(&self.attacker.data.name),
+            attacker_header = &self.attacker.data.name,
             attacker_primary_type = self.attacker.data.primary_type,
             attacker_secondary_type = self.attacker.data.secondary_type.as_deref().unwrap_or(""),
-            defender_moves_header = self.css.header.style(defender_moves_header),
-            attacker_moves_header = self.css.header.style(attacker_moves_header),
+            header = self.fg_effect(Colors::Header, Effects::Bold),
         }
     }
 }
@@ -228,7 +253,7 @@ impl<'a, 'b, 'c> MatchDisplay<'a, 'b, 'c> {
             defender,
             attacker,
             stab_only,
-            css: StyleSheet::default(),
+            color_enabled: is_color_enabled(),
         }
     }
 
@@ -263,50 +288,26 @@ impl<'a, 'b, 'c> MatchDisplay<'a, 'b, 'c> {
         let mut other = String::from("");
 
         if !weakness_groups.quad.is_empty() {
-            quad = self.format_group("quad", weakness_groups.quad, attacker, self.css.accent_red);
+            quad = self.format_group("quad", weakness_groups.quad, attacker, Colors::Red);
         }
         if !weakness_groups.double.is_empty() {
-            double = self.format_group(
-                "double",
-                weakness_groups.double,
-                attacker,
-                self.css.accent_yellow,
-            );
+            double = self.format_group("double", weakness_groups.double, attacker, Colors::Yellow);
         }
         if !weakness_groups.neutral.is_empty() {
-            neutral = self.format_group(
-                "neutral",
-                weakness_groups.neutral,
-                attacker,
-                self.css.accent_green,
-            );
+            neutral =
+                self.format_group("neutral", weakness_groups.neutral, attacker, Colors::Green);
         }
         if !weakness_groups.half.is_empty() {
-            half = self.format_group("half", weakness_groups.half, attacker, self.css.accent_blue);
+            half = self.format_group("half", weakness_groups.half, attacker, Colors::Blue);
         }
         if !weakness_groups.quarter.is_empty() {
-            quarter = self.format_group(
-                "quarter",
-                weakness_groups.quarter,
-                attacker,
-                self.css.accent_cyan,
-            );
+            quarter = self.format_group("quarter", weakness_groups.quarter, attacker, Colors::Cyan);
         }
         if !weakness_groups.zero.is_empty() {
-            zero = self.format_group(
-                "zero",
-                weakness_groups.zero,
-                attacker,
-                self.css.accent_violet,
-            );
+            zero = self.format_group("zero", weakness_groups.zero, attacker, Colors::Violet);
         }
         if !weakness_groups.other.is_empty() {
-            other = self.format_group(
-                "other",
-                weakness_groups.other,
-                attacker,
-                self.css.accent_green,
-            );
+            other = self.format_group("other", weakness_groups.other, attacker, Colors::Green);
         }
 
         formatdoc! {
@@ -319,9 +320,13 @@ impl<'a, 'b, 'c> MatchDisplay<'a, 'b, 'c> {
         label: &'static str,
         moves: Vec<&Move>,
         attacker: &PokemonData,
-        group_style: Style,
+        color: Colors,
     ) -> String {
         let mut output = format!("\n{label}: ");
+
+        let style = self.color().fg(color);
+        let normal_color = style.ansi();
+        let stab_color = style.effect(Effects::Underline).ansi();
 
         for move_ in moves {
             let damage_class = match move_.damage_class.as_str() {
@@ -329,14 +334,16 @@ impl<'a, 'b, 'c> MatchDisplay<'a, 'b, 'c> {
                 "physical" => "p",
                 _ => "?",
             };
-            let move_string = format!("{}({})", move_.name, damage_class);
-            let styled_move = if pokemon::is_stab(&move_.type_, attacker) {
-                group_style.underline().style(move_string)
+            let color = if pokemon::is_stab(&move_.type_, attacker) {
+                stab_color
             } else {
-                group_style.style(move_string)
+                normal_color
             };
 
-            output += &format!("{} ", styled_move);
+            output += &format!(
+                "{color}{move_name}({damage_class}){color:#} ",
+                move_name = move_.name,
+            );
         }
 
         output
@@ -346,12 +353,22 @@ impl<'a, 'b, 'c> MatchDisplay<'a, 'b, 'c> {
 pub struct MoveListDisplay<'a, 'b, 'c> {
     move_list: &'a MoveList<'c>,
     pokemon: &'b PokemonData<'c>,
-    css: StyleSheet,
+    color_enabled: bool,
+}
+
+impl DisplayComponent for MoveListDisplay<'_, '_, '_> {
+    fn color_enabled(&self) -> bool {
+        self.color_enabled
+    }
 }
 
 impl fmt::Display for MoveListDisplay<'_, '_, '_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.css.header.style("moves"))?;
+        write!(
+            f,
+            "{header}moves{header:#}",
+            header = self.fg_effect(Colors::Header, Effects::Bold)
+        )?;
         let move_list = self.move_list.get_map();
 
         if move_list.is_empty() {
@@ -369,17 +386,27 @@ impl fmt::Display for MoveListDisplay<'_, '_, '_> {
                 ..
             } = move_.1;
 
-            let is_stab = pokemon::is_stab(&move_.1.type_, self.pokemon);
-            let stab = if is_stab { "(s)" } else { "" };
+            let stab = if pokemon::is_stab(&move_.1.type_, self.pokemon) {
+                "(s)"
+            } else {
+                ""
+            };
 
-            let move_name = format!("{name}{stab}", name = self.css.accent_green.style(name));
-            let type_damage = format!("{type_} {damage_class}");
-            let stats = format!(
-                "power: {:3}  accuracy: {:3}  pp: {:2}",
-                self.css.accent_red.style(power.unwrap_or(0)),
-                self.css.accent_green.style(accuracy.unwrap_or(0)),
-                self.css.accent_blue.style(pp.unwrap_or(0))
-            );
+            let power = if let Some(power) = power {
+                power.to_string()
+            } else {
+                "N/A".to_string()
+            };
+            let accuracy = if let Some(accuracy) = accuracy {
+                accuracy.to_string()
+            } else {
+                "N/A".to_string()
+            };
+            let pp = if let Some(pp) = pp {
+                pp.to_string()
+            } else {
+                "N/A".to_string()
+            };
 
             let default_learn = ("".to_string(), 0i64);
             let (learn_method, level) = self
@@ -392,11 +419,22 @@ impl fmt::Display for MoveListDisplay<'_, '_, '_> {
             } else {
                 level.to_string()
             };
-            let learn = format!("{} {}", learn_method, learn_level);
+
+            let move_name = format!(
+                "{green}{name}{green:#}{stab}",
+                green = self.fg(Colors::Green)
+            );
+            let move_type = format!("{type_} {damage_class}");
+            let move_stats = format!(
+                "power: {red}{power:3}{red:#}  accuracy: {green}{accuracy:3}{green:#}  pp: {blue}{pp:2}{blue:#}",
+                green = self.fg(Colors::Green),
+                red = self.fg(Colors::Red),
+                blue = self.fg(Colors::Blue),
+            );
 
             writedoc! {
                 f,
-                "\n{move_name:33}{type_damage:22}{stats:80}{learn}",
+                "\n{move_name:35}{move_type:20}{move_stats:80}{learn_method} {learn_level}",
             }?;
         }
 
@@ -409,14 +447,20 @@ impl<'a, 'b, 'c> MoveListDisplay<'a, 'b, 'c> {
         MoveListDisplay {
             move_list,
             pokemon,
-            css: StyleSheet::default(),
+            color_enabled: is_color_enabled(),
         }
     }
 }
 
 pub struct MoveDisplay<'a, 'b> {
     move_: &'a Move<'b>,
-    css: StyleSheet,
+    color_enabled: bool,
+}
+
+impl DisplayComponent for MoveDisplay<'_, '_> {
+    fn color_enabled(&self) -> bool {
+        self.color_enabled
+    }
 }
 
 impl fmt::Display for MoveDisplay<'_, '_> {
@@ -433,11 +477,27 @@ impl fmt::Display for MoveDisplay<'_, '_> {
             ..
         } = self.move_;
 
+        let power = if let Some(power) = power {
+            power.to_string()
+        } else {
+            "N/A".to_string()
+        };
+        let accuracy = if let Some(accuracy) = accuracy {
+            accuracy.to_string()
+        } else {
+            "N/A".to_string()
+        };
+        let pp = if let Some(pp) = pp {
+            pp.to_string()
+        } else {
+            "N/A".to_string()
+        };
+
         let stats = format!(
-            "power: {:3}  accuracy: {:3}  pp: {:3}",
-            self.css.accent_red.style(power.unwrap_or(0)),
-            self.css.accent_green.style(accuracy.unwrap_or(0)),
-            self.css.accent_blue.style(pp.unwrap_or(0))
+            "power: {red}{power:3}{red:#}  accuracy: {green}{accuracy:3}{green:#}  pp: {blue}{pp:3}{blue:#}",
+            red = self.fg(Colors::Red),
+            green = self.fg(Colors::Green),
+            blue = self.fg(Colors::Blue),
         );
 
         let effect_text = if let Some(chance) = effect_chance {
@@ -448,11 +508,11 @@ impl fmt::Display for MoveDisplay<'_, '_> {
 
         writedoc! {
             f,
-            "{name}
+            "{header}{name}{header:#}
             {type_} {damage_class}
             {stats}
             {effect_text}",
-            name = self.css.header.style(name),
+            header = self.fg_effect(Colors::Header, Effects::Bold)
         }
     }
 }
@@ -461,14 +521,20 @@ impl<'a, 'b> MoveDisplay<'a, 'b> {
     pub fn new(move_: &'a Move<'b>) -> Self {
         MoveDisplay {
             move_,
-            css: StyleSheet::default(),
+            color_enabled: is_color_enabled(),
         }
     }
 }
 
 pub struct AbilityDisplay<'a, 'b> {
     ability: &'a Ability<'b>,
-    css: StyleSheet,
+    color_enabled: bool,
+}
+
+impl DisplayComponent for AbilityDisplay<'_, '_> {
+    fn color_enabled(&self) -> bool {
+        self.color_enabled
+    }
 }
 
 impl fmt::Display for AbilityDisplay<'_, '_> {
@@ -477,9 +543,9 @@ impl fmt::Display for AbilityDisplay<'_, '_> {
 
         writedoc! {
             f,
-            "{name}
+            "{header}{name}{header:#}
             {effect}",
-            name = self.css.header.style(name),
+            header = self.fg_effect(Colors::Header, Effects::Bold)
         }
     }
 }
@@ -488,19 +554,29 @@ impl<'a, 'b> AbilityDisplay<'a, 'b> {
     pub fn new(ability: &'a Ability<'b>) -> Self {
         AbilityDisplay {
             ability,
-            css: StyleSheet::default(),
+            color_enabled: is_color_enabled(),
         }
     }
 }
 
 pub struct EvolutionStepDisplay<'a> {
     evolution_step: &'a EvolutionStep,
-    css: StyleSheet,
+    color_enabled: bool,
+}
+
+impl DisplayComponent for EvolutionStepDisplay<'_> {
+    fn color_enabled(&self) -> bool {
+        self.color_enabled
+    }
 }
 
 impl fmt::Display for EvolutionStepDisplay<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, "{}", self.css.header.style("evolution"))?;
+        writeln!(
+            f,
+            "{header}evolution{header:#}",
+            header = self.fg_effect(Colors::Header, Effects::Bold)
+        )?;
         self.traverse_dfs(f, self.evolution_step, 0)?;
         Ok(())
     }
@@ -510,7 +586,7 @@ impl<'a> EvolutionStepDisplay<'a> {
     pub fn new(evolution_step: &'a EvolutionStep) -> Self {
         EvolutionStepDisplay {
             evolution_step,
-            css: StyleSheet::default(),
+            color_enabled: is_color_enabled(),
         }
     }
 
@@ -538,9 +614,10 @@ impl<'a> EvolutionStepDisplay<'a> {
         let methods = self.format_methods(&step.methods);
         write!(
             f,
-            "{indentation}{species} {methods}",
+            "{indentation}{green}{species}{green:#} {methods}",
             indentation = "  ".repeat(depth),
-            species = self.css.accent_green.style(&step.name),
+            green = self.fg(Colors::Green),
+            species = step.name
         )
     }
 
@@ -573,7 +650,7 @@ impl<'a> EvolutionStepDisplay<'a> {
             trade_species,
             turn_upside_down,
         } = method;
-        let mut output = format!("{}", self.css.accent_blue.style(trigger));
+        let mut output = format!("{blue}{trigger}{blue:#}", blue = self.fg(Colors::Blue));
 
         if let Some(item) = item {
             output += &format!(" {item}");
