@@ -28,6 +28,7 @@ pub struct PokemonData<'a> {
     pub primary_type: String,
     pub secondary_type: Option<String>,
     pub learn_moves: HashMap<String, (String, i64)>,
+    pub group: PokemonGroup,
     pub game: String,
     pub generation: u8,
     pub stats: Stats,
@@ -75,6 +76,12 @@ impl<'a> PokemonData<'a> {
     pub async fn get_evolution_steps(&self) -> Result<EvolutionStep> {
         self.api.get_evolution_steps(&self.species).await
     }
+}
+
+pub enum PokemonGroup {
+    Mythical,
+    Legendary,
+    Regular,
 }
 
 pub struct Type<'a> {

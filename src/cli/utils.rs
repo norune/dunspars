@@ -5,10 +5,11 @@ use indoc::formatdoc;
 pub enum Colors {
     Header,
     Red,
+    Orange,
     Yellow,
     Green,
-    Blue,
     Cyan,
+    Blue,
     Violet,
 }
 
@@ -17,10 +18,11 @@ impl Colors {
         match self {
             Colors::Header => Some(anstyle::Ansi256Color(10).into()),
             Colors::Red => Some(anstyle::Ansi256Color(160).into()),
+            Colors::Orange => Some(anstyle::Ansi256Color(172).into()),
             Colors::Yellow => Some(anstyle::Ansi256Color(184).into()),
             Colors::Green => Some(anstyle::Ansi256Color(77).into()),
+            Colors::Cyan => Some(anstyle::Ansi256Color(43).into()),
             Colors::Blue => Some(anstyle::Ansi256Color(33).into()),
-            Colors::Cyan => Some(anstyle::Ansi256Color(45).into()),
             Colors::Violet => Some(anstyle::Ansi256Color(99).into()),
         }
     }
@@ -112,8 +114,18 @@ pub fn is_color_enabled() -> bool {
 }
 
 fn is_terminal() -> bool {
-    let stdout = stdout();
-    stdout.is_terminal()
+    stdout().is_terminal()
+}
+
+pub fn rate_number_to_color(stat: f64, ceiling: f64) -> Colors {
+    match stat {
+        stat if stat > ceiling * 0.83 => Colors::Red,
+        stat if stat > ceiling * 0.66 => Colors::Orange,
+        stat if stat > ceiling * 0.50 => Colors::Yellow,
+        stat if stat > ceiling * 0.33 => Colors::Green,
+        stat if stat > ceiling * 0.16 => Colors::Blue,
+        _ => Colors::Violet,
+    }
 }
 
 pub trait WeaknessDisplay<T> {
@@ -163,22 +175,22 @@ pub trait WeaknessDisplay<T> {
             quad = self.format_group("quad", weakness_groups.quad, Colors::Red);
         }
         if !weakness_groups.double.is_empty() {
-            double = self.format_group("double", weakness_groups.double, Colors::Yellow);
+            double = self.format_group("double", weakness_groups.double, Colors::Orange);
         }
         if !weakness_groups.neutral.is_empty() {
             neutral = self.format_group("neutral", weakness_groups.neutral, Colors::Green);
         }
         if !weakness_groups.half.is_empty() {
-            half = self.format_group("half", weakness_groups.half, Colors::Blue);
+            half = self.format_group("half", weakness_groups.half, Colors::Cyan);
         }
         if !weakness_groups.quarter.is_empty() {
-            quarter = self.format_group("quarter", weakness_groups.quarter, Colors::Cyan);
+            quarter = self.format_group("quarter", weakness_groups.quarter, Colors::Blue);
         }
         if !weakness_groups.zero.is_empty() {
             zero = self.format_group("zero", weakness_groups.zero, Colors::Violet);
         }
         if !weakness_groups.other.is_empty() {
-            other = self.format_group("other", weakness_groups.other, Colors::Green);
+            other = self.format_group("other", weakness_groups.other, Colors::Yellow);
         }
 
         formatdoc! {

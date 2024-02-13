@@ -2,10 +2,12 @@ use std::fmt;
 
 use indoc::writedoc;
 
-use crate::cli::utils::{is_color_enabled, Colors, DisplayComponent, Effects, WeaknessDisplay};
+use crate::cli::utils::{
+    is_color_enabled, rate_number_to_color, Colors, DisplayComponent, Effects, WeaknessDisplay,
+};
 use crate::pokemon::{
-    self, Ability, EvolutionMethod, EvolutionStep, Move, MoveList, Pokemon, PokemonData, Stats,
-    TypeChart,
+    self, Ability, EvolutionMethod, EvolutionStep, Move, MoveList, Pokemon, PokemonData,
+    PokemonGroup, Stats, TypeChart,
 };
 
 pub struct PokemonDisplay<'a, 'b> {
@@ -23,14 +25,26 @@ impl fmt::Display for PokemonDisplay<'_, '_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let PokemonData {
             name,
-            game: version,
+            game,
             generation,
             primary_type,
             secondary_type,
+            group,
             stats,
             abilities,
             ..
         } = self.pokemon;
+
+        let secondary_type = match secondary_type {
+            Some(type_) => format!(" {type_} "),
+            None => " ".to_string(),
+        };
+
+        let group = match group {
+            PokemonGroup::Mythical => "mythical",
+            PokemonGroup::Legendary => "legendary",
+            PokemonGroup::Regular => "",
+        };
 
         let stats_display = StatsDisplay::new(stats);
         let abilities = abilities
@@ -47,12 +61,12 @@ impl fmt::Display for PokemonDisplay<'_, '_> {
 
         writedoc! {
             f,
-            "{header}{name}{header:#} {primary_type} {secondary_type}
+            "{header}{name}{header:#} {primary_type}{secondary_type}{yellow}{group}{yellow:#}
             {abilities}
             {stats_display}
-            {version} gen-{generation}",
+            {game} gen-{generation}",
             header = self.fg_effect(Colors::Header, Effects::Bold),
-            secondary_type = secondary_type.as_deref().unwrap_or("")
+            yellow = self.fg(Colors::Yellow),
         }
     }
 }
@@ -89,18 +103,21 @@ impl fmt::Display for StatsDisplay<'_> {
         } = self.stats;
         let total = hp + attack + defense + special_attack + special_defense + speed;
 
+        // 255 is the actual stat ceiling, but Blissey/Chansey's HP is the only stat that exceeds 200
+        let hp_color = self.fg(rate_number_to_color(*hp as f64, 200f64));
+        let at_color = self.fg(rate_number_to_color(*attack as f64, 200f64));
+        let df_color = self.fg(rate_number_to_color(*defense as f64, 200f64));
+        let sat_color = self.fg(rate_number_to_color(*special_attack as f64, 200f64));
+        let sdf_color = self.fg(rate_number_to_color(*special_defense as f64, 200f64));
+        let spd_color = self.fg(rate_number_to_color(*speed as f64, 200f64));
+        // 720 is based on Arceus' total stats; highest as of this writing
+        let total_color = self.fg_effect(rate_number_to_color(total as f64, 720f64), Effects::Bold);
+
         writedoc! {
             f,
             "hp    atk   def   satk  sdef  spd   total
-            {red}{hp:<6}{yellow}{attack:<6}{blue}{defense:<6}{green}{special_attack:<6}\
-            {cyan}{special_defense:<6}{violet}{speed:<6}{header}{total:<6}{header:#}",
-            red = self.fg(Colors::Red),
-            yellow = self.fg(Colors::Yellow),
-            blue = self.fg(Colors::Blue),
-            green = self.fg(Colors::Green),
-            cyan = self.fg(Colors::Cyan),
-            violet = self.fg(Colors::Violet),
-            header = self.fg_effect(Colors::Header, Effects::Bold),
+            {hp_color}{hp:<6}{at_color}{attack:<6}{df_color}{defense:<6}{sat_color}{special_attack:<6}\
+            {sdf_color}{special_defense:<6}{spd_color}{speed:<6}{total_color}{total:<6}{total_color:#}",
         }
     }
 }

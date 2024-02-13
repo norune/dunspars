@@ -26,15 +26,16 @@ use rustemon::model::moves::{Move as RustemonMove, PastMoveStatValues as Rustemo
 use rustemon::model::pokemon::{
     Ability as RustemonAbility, AbilityEffectChange as RustemonPastAbilityEffect,
     Pokemon as RustemonPokemon, PokemonAbility as RustemonPokemonAbility,
-    PokemonMove as RustemonPokemonMove, PokemonStat as RustemonStat,
-    PokemonType as RustemonTypeSlot, PokemonTypePast as RustemonPastPokemonType,
-    Type as RustemonType, TypeRelations as RustemonTypeRelations,
-    TypeRelationsPast as RustemonPastTypeRelations,
+    PokemonMove as RustemonPokemonMove, PokemonSpecies as RustemonSpecies,
+    PokemonStat as RustemonStat, PokemonType as RustemonTypeSlot,
+    PokemonTypePast as RustemonPastPokemonType, Type as RustemonType,
+    TypeRelations as RustemonTypeRelations, TypeRelationsPast as RustemonPastTypeRelations,
 };
 use rustemon::model::resource::{Effect as RustemonEffect, VerboseEffect as RustemonVerboseEffect};
 
 use crate::pokemon::{
-    Ability, EvolutionMethod, EvolutionStep, Move, PokemonData, Stats, Type, TypeChart,
+    Ability, EvolutionMethod, EvolutionStep, Move, PokemonData, PokemonGroup, Stats, Type,
+    TypeChart,
 };
 
 pub struct ApiWrapper {
@@ -102,6 +103,8 @@ impl ApiWrapper {
             self.get_pokemon_type(types, past_types, current_generation);
         let abilities = self.get_pokemon_abilities(abilities);
 
+        let group = self.get_pokemon_group(&species.name).await?;
+
         Ok(PokemonData {
             name,
             primary_type,
@@ -109,6 +112,7 @@ impl ApiWrapper {
             learn_moves,
             abilities,
             species: species.name,
+            group,
             stats: extract_stats(stats),
             game: game.to_string(),
             generation: current_generation,
@@ -169,6 +173,24 @@ impl ApiWrapper {
             .iter()
             .map(|a| (a.ability.name.clone(), a.is_hidden))
             .collect::<Vec<_>>()
+    }
+
+    async fn get_pokemon_group(&self, species: &str) -> Result<PokemonGroup> {
+        let RustemonSpecies {
+            is_legendary,
+            is_mythical,
+            ..
+        } = rustemon_species::get_by_name(species, &self.client).await?;
+
+        if is_mythical {
+            return Ok(PokemonGroup::Mythical);
+        }
+
+        if is_legendary {
+            return Ok(PokemonGroup::Legendary);
+        }
+
+        Ok(PokemonGroup::Regular)
     }
 
     pub async fn get_type(&self, type_str: &str, current_generation: u8) -> Result<Type> {
