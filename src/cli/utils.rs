@@ -1,5 +1,7 @@
 use std::io::{stdout, IsTerminal};
 
+use indoc::formatdoc;
+
 pub enum Colors {
     Header,
     Red,
@@ -114,18 +116,8 @@ fn is_terminal() -> bool {
     stdout.is_terminal()
 }
 
-pub struct WeaknessGroups<T> {
-    pub quad: Vec<T>,
-    pub double: Vec<T>,
-    pub neutral: Vec<T>,
-    pub half: Vec<T>,
-    pub quarter: Vec<T>,
-    pub zero: Vec<T>,
-    pub other: Vec<T>,
-}
-
-impl<T> WeaknessGroups<T> {
-    pub fn new<C, F, I>(collection: C, mut cb: F) -> Self
+pub trait WeaknessDisplay<T> {
+    fn group_by_weakness<C, F, I>(&self, collection: C, mut cb: F) -> WeaknessGroups<T>
     where
         C: IntoIterator<Item = I>,
         F: FnMut(I) -> Option<(T, f32)>,
@@ -157,4 +149,52 @@ impl<T> WeaknessGroups<T> {
 
         groups
     }
+
+    fn format_groups(&self, weakness_groups: WeaknessGroups<T>) -> String {
+        let mut quad = String::from("");
+        let mut double = String::from("");
+        let mut neutral = String::from("");
+        let mut half = String::from("");
+        let mut quarter = String::from("");
+        let mut zero = String::from("");
+        let mut other = String::from("");
+
+        if !weakness_groups.quad.is_empty() {
+            quad = self.format_group("quad", weakness_groups.quad, Colors::Red);
+        }
+        if !weakness_groups.double.is_empty() {
+            double = self.format_group("double", weakness_groups.double, Colors::Yellow);
+        }
+        if !weakness_groups.neutral.is_empty() {
+            neutral = self.format_group("neutral", weakness_groups.neutral, Colors::Green);
+        }
+        if !weakness_groups.half.is_empty() {
+            half = self.format_group("half", weakness_groups.half, Colors::Blue);
+        }
+        if !weakness_groups.quarter.is_empty() {
+            quarter = self.format_group("quarter", weakness_groups.quarter, Colors::Cyan);
+        }
+        if !weakness_groups.zero.is_empty() {
+            zero = self.format_group("zero", weakness_groups.zero, Colors::Violet);
+        }
+        if !weakness_groups.other.is_empty() {
+            other = self.format_group("other", weakness_groups.other, Colors::Green);
+        }
+
+        formatdoc! {
+            "{quad}{double}{neutral}{half}{quarter}{zero}{other}"
+        }
+    }
+
+    fn format_group(&self, label: &'static str, group: Vec<T>, color: Colors) -> String;
+}
+
+pub struct WeaknessGroups<T> {
+    pub quad: Vec<T>,
+    pub double: Vec<T>,
+    pub neutral: Vec<T>,
+    pub half: Vec<T>,
+    pub quarter: Vec<T>,
+    pub zero: Vec<T>,
+    pub other: Vec<T>,
 }
