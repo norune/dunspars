@@ -23,6 +23,7 @@ impl<'a> Pokemon<'a> {
     }
 }
 
+#[derive(Debug)]
 pub struct PokemonData<'a> {
     pub name: String,
     pub primary_type: String,
@@ -78,12 +79,14 @@ impl<'a> PokemonData<'a> {
     }
 }
 
+#[derive(Debug)]
 pub enum PokemonGroup {
     Mythical,
     Legendary,
     Regular,
 }
 
+#[derive(Debug)]
 pub struct Type<'a> {
     pub name: String,
     pub offense_chart: TypeChart,
@@ -98,7 +101,7 @@ impl<'a> Type<'a> {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Stats {
     pub hp: i64,
     pub attack: i64,
@@ -163,6 +166,7 @@ impl TypeChart {
     }
 }
 
+#[derive(Debug)]
 pub struct Move<'a> {
     pub name: String,
     pub accuracy: Option<i64>,
@@ -197,6 +201,7 @@ impl<'a> MoveList<'a> {
     }
 }
 
+#[derive(Debug)]
 pub struct Ability<'a> {
     pub name: String,
     pub effect: String,

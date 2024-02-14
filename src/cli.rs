@@ -22,7 +22,7 @@ const VERSION: &str = env!("DUNSPARS_VERSION");
 struct Cli {
     #[command(subcommand)]
     command: Commands,
-    /// Specifies game version to pull data that is specific to a game or generation
+    /// Sets the mainline Pokémon game the output will be based on
     #[clap(short, long, global = true)]
     game: Option<String>,
 }

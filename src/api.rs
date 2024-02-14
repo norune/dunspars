@@ -38,6 +38,7 @@ use crate::pokemon::{
     TypeChart,
 };
 
+#[derive(Debug)]
 pub struct ApiWrapper {
     pub client: RustemonClient,
     pub gen_map: GenerationMap,
@@ -402,6 +403,7 @@ impl ApiWrapper {
     }
 }
 
+#[derive(Debug)]
 pub struct GenerationMap(HashMap<String, u8>);
 impl GenerationMap {
     pub async fn try_new(client: &RustemonClient, gen_regex: &Regex) -> Result<Self> {
@@ -616,5 +618,95 @@ impl Past<Vec<RustemonEffect>> for RustemonPastAbilityEffect {
 
     fn value(self) -> Vec<RustemonEffect> {
         self.effect_entries
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_type() {
+        let api = ApiWrapper::try_new().await.unwrap();
+
+        // Fairy was not introduced until gen 6
+        api.get_type("fairy", 3).await.unwrap_err();
+        api.get_type("fairy", 6).await.unwrap();
+
+        // Bug gen 1 2x against poison
+        let bug_gen_1 = api.get_type("bug", 1).await.unwrap();
+        assert_eq!(2.0, bug_gen_1.offense_chart.get_multiplier("poison"));
+        assert_eq!(1.0, bug_gen_1.offense_chart.get_multiplier("dark"));
+
+        // Bug gen >=2 2x against dark
+        let bug_gen_2 = api.get_type("bug", 2).await.unwrap();
+        assert_eq!(0.5, bug_gen_2.offense_chart.get_multiplier("poison"));
+        assert_eq!(2.0, bug_gen_2.offense_chart.get_multiplier("dark"));
+    }
+
+    #[tokio::test]
+    async fn test_move() {
+        let api = ApiWrapper::try_new().await.unwrap();
+
+        // Earth Power was not introduced until gen 4
+        api.get_move("earth-power", 3).await.unwrap_err();
+        api.get_move("earth-power", 4).await.unwrap();
+
+        // Tackle gen 1-4 power: 35 accuracy: 95
+        let tackle_gen_4 = api.get_move("tackle", 4).await.unwrap();
+        assert_eq!(35, tackle_gen_4.power.unwrap());
+        assert_eq!(95, tackle_gen_4.accuracy.unwrap());
+
+        // Tackle gen 5-6 power: 50 accuracy: 100
+        let tackle_gen_5 = api.get_move("tackle", 5).await.unwrap();
+        assert_eq!(50, tackle_gen_5.power.unwrap());
+        assert_eq!(100, tackle_gen_5.accuracy.unwrap());
+
+        // Tackle gen >=7 power: 40 accuracy: 100
+        let tackle_gen_9 = api.get_move("tackle", 9).await.unwrap();
+        assert_eq!(40, tackle_gen_9.power.unwrap());
+        assert_eq!(100, tackle_gen_9.accuracy.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_ability() {
+        let api = ApiWrapper::try_new().await.unwrap();
+
+        // Beads of Ruin was not introduced until gen 9
+        api.get_ability("beads-of-ruin", 8).await.unwrap_err();
+        api.get_ability("beads-of-ruin", 9).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_pokemon() {
+        let api = ApiWrapper::try_new().await.unwrap();
+
+        // Ogerpon was not inroduced until gen 9
+        api.get_pokemon("ogerpon", "sword-shield")
+            .await
+            .unwrap_err();
+        api.get_pokemon("ogerpon", "the-teal-mask").await.unwrap();
+
+        // Wailord is not present in gen 9, but is present in gen 8
+        api.get_pokemon("wailord", "scarlet-violet")
+            .await
+            .unwrap_err();
+        api.get_pokemon("wailord", "sword-shield").await.unwrap();
+
+        // Test dual type defense chart
+        let golem = api.get_pokemon("golem", "scarlet-violet").await.unwrap();
+        let golem_defense = golem.get_defense_chart().await.unwrap();
+        assert_eq!(4.0, golem_defense.get_multiplier("water"));
+        assert_eq!(2.0, golem_defense.get_multiplier("fighting"));
+        assert_eq!(1.0, golem_defense.get_multiplier("psychic"));
+        assert_eq!(0.5, golem_defense.get_multiplier("flying"));
+        assert_eq!(0.25, golem_defense.get_multiplier("poison"));
+        assert_eq!(0.0, golem_defense.get_multiplier("electric"));
+
+        // Clefairy was Normal type until gen 6
+        let clefairy_gen_5 = api.get_pokemon("clefairy", "black-white").await.unwrap();
+        assert_eq!("normal", clefairy_gen_5.primary_type);
+        let clefairy_gen_6 = api.get_pokemon("clefairy", "x-y").await.unwrap();
+        assert_eq!("fairy", clefairy_gen_6.primary_type);
     }
 }
