@@ -100,12 +100,12 @@ pub trait DisplayComponent: std::fmt::Display {
 
 pub fn is_color_enabled() -> bool {
     if let Ok(force_color) = std::env::var("FORCE_COLOR") {
-        if !force_color.is_empty() {
+        if is_env_affirmative(&force_color) {
             return true;
         }
     };
     if let Ok(no_color) = std::env::var("NO_COLOR") {
-        if !no_color.is_empty() {
+        if is_env_affirmative(&no_color) {
             return false;
         }
     };
@@ -113,7 +113,16 @@ pub fn is_color_enabled() -> bool {
     is_terminal()
 }
 
-fn is_terminal() -> bool {
+pub fn is_env_negative(value: &str) -> bool {
+    let value = value.to_lowercase();
+    value == "false" || value == "no" || value == "0"
+}
+
+pub fn is_env_affirmative(value: &str) -> bool {
+    !is_env_negative(value)
+}
+
+pub fn is_terminal() -> bool {
     stdout().is_terminal()
 }
 

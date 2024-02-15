@@ -1,16 +1,14 @@
+mod utils;
+use utils::GenerationResource;
+
 use std::collections::HashMap;
 
 use anyhow::{anyhow, bail, Result};
 use dirs;
-use futures::stream::FuturesUnordered;
-use futures::StreamExt;
-use regex::Regex;
-
 use rustemon::client::{
     CACacheManager as RustemonCacheManager, CacheMode as RustemonCacheMode, RustemonClient,
     RustemonClientBuilder,
 };
-use rustemon::games::version_group as rustemon_version;
 use rustemon::moves::move_ as rustemon_moves;
 use rustemon::pokemon::pokemon_species as rustemon_species;
 use rustemon::pokemon::{
@@ -18,31 +16,22 @@ use rustemon::pokemon::{
 };
 use rustemon::Follow;
 
-use rustemon::model::evolution::{
-    ChainLink as RustemonEvoStep, EvolutionChain as RustemonEvoRoot,
-    EvolutionDetail as RustemonEvoMethod,
-};
-use rustemon::model::moves::{Move as RustemonMove, PastMoveStatValues as RustemonPastMoveStats};
+use rustemon::model::evolution::EvolutionChain as RustemonEvoRoot;
+use rustemon::model::moves::Move as RustemonMove;
 use rustemon::model::pokemon::{
-    Ability as RustemonAbility, AbilityEffectChange as RustemonPastAbilityEffect,
-    Pokemon as RustemonPokemon, PokemonAbility as RustemonPokemonAbility,
-    PokemonMove as RustemonPokemonMove, PokemonSpecies as RustemonSpecies,
-    PokemonStat as RustemonStat, PokemonType as RustemonTypeSlot,
+    Ability as RustemonAbility, Pokemon as RustemonPokemon,
+    PokemonAbility as RustemonPokemonAbility, PokemonMove as RustemonPokemonMove,
+    PokemonSpecies as RustemonSpecies, PokemonType as RustemonTypeSlot,
     PokemonTypePast as RustemonPastPokemonType, Type as RustemonType,
-    TypeRelations as RustemonTypeRelations, TypeRelationsPast as RustemonPastTypeRelations,
 };
-use rustemon::model::resource::{Effect as RustemonEffect, VerboseEffect as RustemonVerboseEffect};
+use rustemon::model::resource::VerboseEffect as RustemonVerboseEffect;
 
-use crate::pokemon::{
-    Ability, EvolutionMethod, EvolutionStep, Move, PokemonData, PokemonGroup, Stats, Type,
-    TypeChart,
-};
+use crate::pokemon::{Ability, EvolutionStep, Move, PokemonData, PokemonGroup, Type, TypeChart};
 
 #[derive(Debug)]
 pub struct ApiWrapper {
     pub client: RustemonClient,
-    pub gen_map: GenerationMap,
-    pub gen_regex: Regex,
+    pub generation_resource: GenerationResource,
     cache_manager: RustemonCacheManager,
 }
 
@@ -64,16 +53,11 @@ impl ApiWrapper {
             .with_mode(cache_mode)
             .try_build()?;
 
-        // PokéAPI keeps generation names in Roman numerals.
-        // Might be quicker to just take it from resource urls via regex instead.
-        // Regex compilation is expensive, so we're compiling it just once here.
-        let gen_regex = Regex::new(r"generation/(?P<gen>\d+)/?$").unwrap();
-        let gen_map = GenerationMap::try_new(&client, &gen_regex).await?;
+        let generation_resource = GenerationResource::try_new(&client).await?;
 
         Ok(Self {
             client,
-            gen_map,
-            gen_regex,
+            generation_resource,
             cache_manager,
         })
     }
@@ -90,7 +74,7 @@ impl ApiWrapper {
             ..
         } = rustemon_pokemon::get_by_name(pokemon, &self.client).await?;
 
-        let current_generation = get_gen_from_game(game, &self.gen_map);
+        let current_generation = self.generation_resource.get_gen_from_game(game);
         let learn_moves = self.get_pokemon_moves(moves, current_generation);
         // PokéAPI doesn't seem to supply a field that denotes when a Pokémon was introduced.
         // So the next best thing is to check if they have any moves in the specified generation.
@@ -114,7 +98,7 @@ impl ApiWrapper {
             abilities,
             species: species.name,
             group,
-            stats: extract_stats(stats),
+            stats: utils::extract_stats(stats),
             game: game.to_string(),
             generation: current_generation,
             api: self,
@@ -127,7 +111,8 @@ impl ApiWrapper {
         past_types: Vec<RustemonPastPokemonType>,
         generation: u8,
     ) -> (String, Option<String>) {
-        let pokemon_types = self.match_past(generation, past_types).unwrap_or(types);
+        let pokemon_types =
+            utils::match_past(generation, past_types, &self.generation_resource).unwrap_or(types);
 
         let primary_type = pokemon_types
             .iter()
@@ -152,7 +137,9 @@ impl ApiWrapper {
         let mut learn_moves = HashMap::new();
         for move_ in moves {
             let learnable_move = move_.version_group_details.iter().find(|vg| {
-                let vg_gen = get_gen_from_game(&vg.version_group.name, &self.gen_map);
+                let vg_gen = self
+                    .generation_resource
+                    .get_gen_from_game(&vg.version_group.name);
                 vg_gen == generation
             });
 
@@ -205,9 +192,12 @@ impl ApiWrapper {
 
         self.check_generation("Type", type_str, &generation.url, current_generation)?;
 
-        let relations = self
-            .match_past(current_generation, past_damage_relations)
-            .unwrap_or(damage_relations);
+        let relations = utils::match_past(
+            current_generation,
+            past_damage_relations,
+            &self.generation_resource,
+        )
+        .unwrap_or(damage_relations);
 
         let mut offense_chart = HashMap::new();
         let mut defense_chart = HashMap::new();
@@ -268,7 +258,9 @@ impl ApiWrapper {
             .find(|e| e.language.name == "en")
             .unwrap_or_default();
 
-        if let Some(past_stats) = self.match_past(current_generation, past_values) {
+        if let Some(past_stats) =
+            utils::match_past(current_generation, past_values, &self.generation_resource)
+        {
             accuracy = past_stats.accuracy.or(accuracy);
             power = past_stats.power.or(power);
             pp = past_stats.pp.or(pp);
@@ -288,7 +280,11 @@ impl ApiWrapper {
             }
         }
 
-        if let Some(past_effects) = self.match_past(current_generation, effect_changes) {
+        if let Some(past_effects) = utils::match_past(
+            current_generation,
+            effect_changes,
+            &self.generation_resource,
+        ) {
             if let Some(past_effect) = past_effects.into_iter().find(|e| e.language.name == "en") {
                 effect += format!(
                     "\n\nGeneration {current_generation}: {}",
@@ -333,7 +329,11 @@ impl ApiWrapper {
             .find(|e| e.language.name == "en")
             .unwrap_or_default();
 
-        if let Some(past_effects) = self.match_past(current_generation, effect_changes) {
+        if let Some(past_effects) = utils::match_past(
+            current_generation,
+            effect_changes,
+            &self.generation_resource,
+        ) {
             if let Some(past_effect) = past_effects.into_iter().find(|e| e.language.name == "en") {
                 effect += format!(
                     "\n\nGeneration {current_generation}: {}",
@@ -359,7 +359,7 @@ impl ApiWrapper {
             .unwrap()
             .follow(&self.client)
             .await?;
-        let evolution_step = traverse_chain(chain);
+        let evolution_step = utils::traverse_chain(chain);
 
         Ok(evolution_step)
     }
@@ -378,7 +378,7 @@ impl ApiWrapper {
         url: &str,
         current_generation: u8,
     ) -> Result<()> {
-        let generation = get_gen_from_url(url, &self.gen_regex);
+        let generation = self.generation_resource.get_gen_from_url(url);
         if current_generation < generation {
             bail!(format!(
                 "{resource} '{label}' is not present in generation {current_generation}"
@@ -386,238 +386,160 @@ impl ApiWrapper {
         }
         Ok(())
     }
-
-    fn match_past<T: Past<U>, U>(&self, current_generation: u8, pasts: Vec<T>) -> Option<U> {
-        let mut oldest_value = None;
-        let mut oldest_generation = 255;
-
-        for past in pasts {
-            let past_generation = past.generation(self);
-            if current_generation <= past_generation && past_generation <= oldest_generation {
-                oldest_value = Some(past.value());
-                oldest_generation = past_generation;
-            }
-        }
-
-        oldest_value
-    }
 }
 
-#[derive(Debug)]
-pub struct GenerationMap(HashMap<String, u8>);
-impl GenerationMap {
-    pub async fn try_new(client: &RustemonClient, gen_regex: &Regex) -> Result<Self> {
-        let mut gen_map = HashMap::new();
-        let game_names = get_all_games(client).await?;
-        let game_data_futures: FuturesUnordered<_> = game_names
+pub enum ResourceResult {
+    Valid,
+    Invalid(Vec<String>),
+}
+
+#[allow(async_fn_in_trait)]
+pub trait Resource: Sized {
+    fn get_matches(&self, value: &str) -> Vec<String> {
+        self.resource()
             .iter()
-            .map(|g| rustemon_version::get_by_name(g, client))
-            .collect();
-        let game_data: Vec<_> = game_data_futures.collect().await;
+            .filter_map(|r| {
+                let close_enough = if !r.is_empty() && !value.is_empty() {
+                    let first_r = r.chars().next().unwrap();
+                    let first_value = value.chars().next().unwrap();
 
-        for game in game_data {
-            let game = game?;
-            let generation = get_gen_from_url(&game.generation.url, gen_regex);
-            gen_map.insert(game.name, generation);
-        }
+                    // Only perform spellcheck on first character match; potentially expensive
+                    first_r == first_value && strsim::levenshtein(r, value) < 4
+                } else {
+                    false
+                };
 
-        Ok(GenerationMap(gen_map))
-    }
-
-    fn get_generation(&self, game: &str) -> u8 {
-        *self.0.get(game).unwrap()
-    }
-}
-
-pub async fn get_all_pokemon(client: &RustemonClient) -> Result<Vec<String>> {
-    Ok(rustemon_pokemon::get_all_entries(client)
-        .await?
-        .into_iter()
-        .map(|p| p.name)
-        .collect::<Vec<String>>())
-}
-
-pub async fn get_all_types(client: &RustemonClient) -> Result<Vec<String>> {
-    Ok(rustemon_type::get_all_entries(client)
-        .await?
-        .into_iter()
-        .map(|p| p.name)
-        .collect::<Vec<String>>())
-}
-
-pub async fn get_all_moves(client: &RustemonClient) -> Result<Vec<String>> {
-    Ok(rustemon_moves::get_all_entries(client)
-        .await?
-        .into_iter()
-        .map(|p| p.name)
-        .collect::<Vec<String>>())
-}
-
-pub async fn get_all_abilities(client: &RustemonClient) -> Result<Vec<String>> {
-    Ok(rustemon_ability::get_all_entries(client)
-        .await?
-        .into_iter()
-        .map(|p| p.name)
-        .collect::<Vec<String>>())
-}
-
-pub async fn get_all_games(client: &RustemonClient) -> Result<Vec<String>> {
-    Ok(rustemon_version::get_all_entries(client)
-        .await?
-        .into_iter()
-        .map(|p| p.name)
-        .collect::<Vec<String>>())
-}
-
-pub fn get_gen_from_game(game: &str, gen_map: &GenerationMap) -> u8 {
-    gen_map.get_generation(game)
-}
-
-pub fn get_gen_from_url(url: &str, regex: &Regex) -> u8 {
-    let caps = regex.captures(url).unwrap();
-    caps["gen"].parse::<u8>().unwrap()
-}
-
-fn traverse_chain(chain_link: RustemonEvoStep) -> EvolutionStep {
-    let evolution_methods = chain_link
-        .evolution_details
-        .into_iter()
-        .map(convert_to_evolution_method)
-        .collect();
-
-    if !chain_link.evolves_to.is_empty() {
-        let evolves_to = chain_link
-            .evolves_to
-            .into_iter()
-            .map(traverse_chain)
-            .collect();
-
-        EvolutionStep::new(chain_link.species.name, evolution_methods, evolves_to)
-    } else {
-        EvolutionStep::new(chain_link.species.name, evolution_methods, vec![])
-    }
-}
-
-fn convert_to_evolution_method(evolution: RustemonEvoMethod) -> EvolutionMethod {
-    let mut method = EvolutionMethod::new(evolution.trigger.name);
-    if let Some(item) = evolution.item {
-        method = method.item(item.name);
-    }
-    if let Some(gender) = evolution.gender {
-        method = method.gender(gender);
-    }
-    if let Some(held_item) = evolution.held_item {
-        method = method.held_item(held_item.name);
-    }
-    if let Some(known_move) = evolution.known_move {
-        method = method.known_move(known_move.name);
-    }
-    if let Some(known_move_type) = evolution.known_move_type {
-        method = method.known_move_type(known_move_type.name);
-    }
-    if let Some(location) = evolution.location {
-        method = method.location(location.name);
-    }
-    if let Some(min_level) = evolution.min_level {
-        method = method.min_level(min_level);
-    }
-    if let Some(min_happiness) = evolution.min_happiness {
-        method = method.min_happiness(min_happiness);
-    }
-    if let Some(min_beauty) = evolution.min_beauty {
-        method = method.min_beauty(min_beauty);
-    }
-    if let Some(min_affection) = evolution.min_affection {
-        method = method.min_affection(min_affection);
-    }
-    if let Some(party_species) = evolution.party_species {
-        method = method.party_species(party_species.name);
-    }
-    if let Some(party_type) = evolution.party_type {
-        method = method.party_type(party_type.name);
-    }
-    if let Some(relative_physical_stats) = evolution.relative_physical_stats {
-        method = method.relative_physical_stats(relative_physical_stats);
-    }
-    if let Some(trade_species) = evolution.trade_species {
-        method = method.trade_species(trade_species.name);
-    }
-    if evolution.needs_overworld_rain {
-        method = method.needs_overworld_rain(true);
-    }
-    if evolution.turn_upside_down {
-        method = method.turn_upside_down(true);
-    }
-    if !evolution.time_of_day.is_empty() {
-        method = method.time_of_day(evolution.time_of_day);
+                if r.contains(value) || close_enough {
+                    Some(r.clone())
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<String>>()
     }
 
-    method
-}
-
-fn extract_stats(stats_vec: Vec<RustemonStat>) -> Stats {
-    let mut stats = Stats::default();
-
-    for RustemonStat {
-        stat, base_stat, ..
-    } in stats_vec
-    {
-        match stat.name.as_str() {
-            "hp" => stats.hp = base_stat,
-            "attack" => stats.attack = base_stat,
-            "defense" => stats.defense = base_stat,
-            "special-attack" => stats.special_attack = base_stat,
-            "special-defense" => stats.special_defense = base_stat,
-            "speed" => stats.speed = base_stat,
-            _ => (),
+    fn check(&self, value: &str) -> ResourceResult {
+        let matches = self.get_matches(value);
+        if matches.iter().any(|m| *m == value) {
+            ResourceResult::Valid
+        } else {
+            ResourceResult::Invalid(matches)
         }
     }
 
-    stats
+    fn validate(&self, value: &str) -> Result<String> {
+        let value = value.to_lowercase();
+        match self.check(&value) {
+            ResourceResult::Valid => Ok(value),
+            ResourceResult::Invalid(matches) => bail!(Self::invalid_message(&value, &matches)),
+        }
+    }
+
+    fn invalid_message(value: &str, matches: &[String]) -> String {
+        let resource_name = Self::label();
+        let mut message = format!("{resource_name} '{value}' not found.");
+
+        if matches.len() > 20 {
+            message += " Potential matches found; too many to display.";
+        } else if !matches.is_empty() {
+            message += &format!(" Potential matches: {}.", matches.join(" "));
+        }
+
+        message
+    }
+
+    async fn try_new(api: &ApiWrapper) -> Result<Self>;
+    fn resource(&self) -> &Vec<String>;
+    fn label() -> &'static str;
 }
 
-trait Past<T> {
-    fn generation(&self, api: &ApiWrapper) -> u8;
-    fn value(self) -> T;
+pub struct PokemonResource {
+    resource: Vec<String>,
 }
-
-impl Past<Vec<RustemonTypeSlot>> for RustemonPastPokemonType {
-    fn generation(&self, api: &ApiWrapper) -> u8 {
-        get_gen_from_url(&self.generation.url, &api.gen_regex)
+impl Resource for PokemonResource {
+    async fn try_new(api: &ApiWrapper) -> Result<Self> {
+        let resource = utils::get_all_pokemon(&api.client).await?;
+        Ok(Self { resource })
     }
 
-    fn value(self) -> Vec<RustemonTypeSlot> {
-        self.types
-    }
-}
-
-impl Past<RustemonTypeRelations> for RustemonPastTypeRelations {
-    fn generation(&self, api: &ApiWrapper) -> u8 {
-        get_gen_from_url(&self.generation.url, &api.gen_regex)
+    fn resource(&self) -> &Vec<String> {
+        &self.resource
     }
 
-    fn value(self) -> RustemonTypeRelations {
-        self.damage_relations
+    fn label() -> &'static str {
+        "Pokémon"
     }
 }
 
-impl Past<RustemonPastMoveStats> for RustemonPastMoveStats {
-    fn generation(&self, api: &ApiWrapper) -> u8 {
-        get_gen_from_game(&self.version_group.name, &api.gen_map) - 1
+pub struct GameResource {
+    resource: Vec<String>,
+}
+impl Resource for GameResource {
+    async fn try_new(api: &ApiWrapper) -> Result<Self> {
+        let resource = utils::get_all_games(&api.client).await?;
+        Ok(Self { resource })
     }
 
-    fn value(self) -> RustemonPastMoveStats {
-        self
+    fn resource(&self) -> &Vec<String> {
+        &self.resource
+    }
+
+    fn label() -> &'static str {
+        "Game"
     }
 }
 
-impl Past<Vec<RustemonEffect>> for RustemonPastAbilityEffect {
-    fn generation(&self, api: &ApiWrapper) -> u8 {
-        get_gen_from_game(&self.version_group.name, &api.gen_map) - 1
+pub struct TypeResource {
+    resource: Vec<String>,
+}
+impl Resource for TypeResource {
+    async fn try_new(api: &ApiWrapper) -> Result<Self> {
+        let resource = utils::get_all_types(&api.client).await?;
+        Ok(Self { resource })
     }
 
-    fn value(self) -> Vec<RustemonEffect> {
-        self.effect_entries
+    fn resource(&self) -> &Vec<String> {
+        &self.resource
+    }
+
+    fn label() -> &'static str {
+        "Type"
+    }
+}
+
+pub struct MoveResource {
+    resource: Vec<String>,
+}
+impl Resource for MoveResource {
+    async fn try_new(api: &ApiWrapper) -> Result<Self> {
+        let resource = utils::get_all_moves(&api.client).await?;
+        Ok(Self { resource })
+    }
+
+    fn resource(&self) -> &Vec<String> {
+        &self.resource
+    }
+
+    fn label() -> &'static str {
+        "Move"
+    }
+}
+
+pub struct AbilityResource {
+    resource: Vec<String>,
+}
+impl Resource for AbilityResource {
+    async fn try_new(api: &ApiWrapper) -> Result<Self> {
+        let resource = utils::get_all_abilities(&api.client).await?;
+        Ok(Self { resource })
+    }
+
+    fn resource(&self) -> &Vec<String> {
+        &self.resource
+    }
+
+    fn label() -> &'static str {
+        "Ability"
     }
 }
 
@@ -626,11 +548,11 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn test_type() {
+    async fn get_type() {
         let api = ApiWrapper::try_new().await.unwrap();
 
         // Fairy was not introduced until gen 6
-        api.get_type("fairy", 3).await.unwrap_err();
+        api.get_type("fairy", 5).await.unwrap_err();
         api.get_type("fairy", 6).await.unwrap();
 
         // Bug gen 1 2x against poison
@@ -645,7 +567,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_move() {
+    async fn get_move() {
         let api = ApiWrapper::try_new().await.unwrap();
 
         // Earth Power was not introduced until gen 4
@@ -669,7 +591,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_ability() {
+    async fn get_ability() {
         let api = ApiWrapper::try_new().await.unwrap();
 
         // Beads of Ruin was not introduced until gen 9
@@ -678,7 +600,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_pokemon() {
+    async fn get_pokemon() {
         let api = ApiWrapper::try_new().await.unwrap();
 
         // Ogerpon was not inroduced until gen 9

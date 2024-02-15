@@ -6,13 +6,10 @@ use clap::{Parser, Subcommand};
 use indoc::printdoc;
 
 use crate::api::{
-    get_all_abilities, get_all_games, get_all_moves, get_all_pokemon, get_all_types,
-    get_gen_from_game, ApiWrapper,
+    AbilityResource, ApiWrapper, GameResource, MoveResource, PokemonResource, Resource,
+    TypeResource,
 };
-use crate::pokemon::{
-    Ability, AbilityName, GameName, Move, MoveName, Pokemon, PokemonData, PokemonName,
-    ResourceName, Type, TypeName,
-};
+use crate::pokemon::{Ability, Move, Pokemon, PokemonData, Type};
 use display::*;
 
 const VERSION: &str = env!("DUNSPARS_VERSION");
@@ -70,7 +67,7 @@ enum Commands {
     Resource {
         /// Name of the resource
         #[arg(value_enum)]
-        resource: Resource,
+        resource: ResourceArgs,
         /// Value to be printed in between values. Defaults to newline
         #[arg(short, long)]
         delimiter: Option<String>,
@@ -84,12 +81,7 @@ enum Commands {
 }
 
 #[derive(Clone, clap::ValueEnum)]
-enum CacheAction {
-    Clear,
-}
-
-#[derive(Clone, clap::ValueEnum)]
-enum Resource {
+enum ResourceArgs {
     Pokemon,
     Moves,
     Abilities,
@@ -97,29 +89,22 @@ enum Resource {
     Types,
 }
 
-impl Resource {
-    async fn get_resource(&self, api: &ApiWrapper) -> Result<Vec<String>> {
-        match self {
-            Resource::Pokemon => Ok(get_all_pokemon(&api.client).await?),
-            Resource::Moves => Ok(get_all_moves(&api.client).await?),
-            Resource::Abilities => Ok(get_all_abilities(&api.client).await?),
-            Resource::Types => Ok(get_all_types(&api.client).await?),
-            Resource::Games => Ok(get_all_games(&api.client).await?),
-        }
-    }
+#[derive(Clone, clap::ValueEnum)]
+enum CacheAction {
+    Clear,
 }
 
 pub async fn run() -> Result<()> {
     let cli = Cli::parse();
     let api = ApiWrapper::try_new().await?;
 
-    let game_resource = Resource::Games.get_resource(&api).await?;
+    let game_resource = GameResource::try_new(&api).await?;
     // Default to the latest game
     let game_name = cli
         .game
-        .unwrap_or(game_resource.last().unwrap().to_string());
-    let game = GameName::try_new(&game_name, &game_resource)?;
-    let generation = get_gen_from_game(game.get(), &api.gen_map);
+        .unwrap_or(game_resource.resource().last().unwrap().to_string());
+    let game = game_resource.validate(&game_name)?;
+    let generation = api.generation_resource.get_gen_from_game(&game);
 
     let program = Program::new(game, generation, api);
 
@@ -148,13 +133,13 @@ pub async fn run() -> Result<()> {
 }
 
 struct Program {
-    game: GameName,
+    game: String,
     generation: u8,
     api: ApiWrapper,
 }
 
 impl Program {
-    pub fn new(game: GameName, generation: u8, api: ApiWrapper) -> Self {
+    pub fn new(game: String, generation: u8, api: ApiWrapper) -> Self {
         Self {
             game,
             generation,
@@ -163,11 +148,10 @@ impl Program {
     }
 
     async fn run_pokemon(&self, name: String, moves: bool, evolution: bool) -> Result<()> {
-        let resource = Resource::Pokemon.get_resource(&self.api).await?;
-        let pokemon_name = PokemonName::try_new(&name, &resource)?;
+        let resource = PokemonResource::try_new(&self.api).await?;
+        let pokemon_name = resource.validate(&name)?;
 
-        let pokemon =
-            PokemonData::from_name(&self.api, pokemon_name.get(), self.game.get()).await?;
+        let pokemon = PokemonData::from_name(&self.api, &pokemon_name, &self.game).await?;
         let pokemon_display = PokemonDisplay::new(&pokemon);
 
         let defense_chart = pokemon.get_defense_chart().await?;
@@ -207,14 +191,14 @@ impl Program {
     }
 
     async fn run_type(&self, name: String) -> Result<()> {
-        let resource = Resource::Types.get_resource(&self.api).await?;
-        let type_name = TypeName::try_new(&name, &resource)?;
+        let resource = TypeResource::try_new(&self.api).await?;
+        let type_name = resource.validate(&name)?;
 
         let Type {
             offense_chart,
             defense_chart,
             ..
-        } = Type::from_name(&self.api, type_name.get(), self.generation).await?;
+        } = Type::from_name(&self.api, &type_name, self.generation).await?;
 
         let offense_chart_display = TypeChartDisplay::new(&offense_chart, "offense chart");
         let defense_chart_display = TypeChartDisplay::new(&defense_chart, "defense chart");
@@ -236,11 +220,10 @@ impl Program {
         attacker_name: String,
         stab_only: bool,
     ) -> Result<()> {
-        let resource = Resource::Pokemon.get_resource(&self.api).await?;
+        let resource = PokemonResource::try_new(&self.api).await?;
 
-        let attacker_name = PokemonName::try_new(&attacker_name, &resource)?;
-        let attacker_data =
-            PokemonData::from_name(&self.api, attacker_name.get(), self.game.get()).await?;
+        let attacker_name = resource.validate(&attacker_name)?;
+        let attacker_data = PokemonData::from_name(&self.api, &attacker_name, &self.game).await?;
         let attacker_moves = attacker_data.get_moves().await?;
         let attacker_chart = attacker_data.get_defense_chart().await?;
         let attacker = Pokemon::new(attacker_data, attacker_chart, attacker_moves);
@@ -248,9 +231,9 @@ impl Program {
         let mut defenders = vec![];
 
         for defender_name in defender_names {
-            let defender_name = PokemonName::try_new(&defender_name, &resource)?;
+            let defender_name = resource.validate(&defender_name)?;
             let defender_data =
-                PokemonData::from_name(&self.api, defender_name.get(), self.game.get()).await?;
+                PokemonData::from_name(&self.api, &defender_name, &self.game).await?;
             let defender_moves = defender_data.get_moves().await?;
             let defender_chart = defender_data.get_defense_chart().await?;
             let defender = Pokemon::new(defender_data, defender_chart, defender_moves);
@@ -273,10 +256,10 @@ impl Program {
     }
 
     async fn run_move(&self, name: String) -> Result<()> {
-        let resource = Resource::Moves.get_resource(&self.api).await?;
-        let move_name = MoveName::try_new(&name, &resource)?;
+        let resource = MoveResource::try_new(&self.api).await?;
+        let move_name = resource.validate(&name)?;
 
-        let move_ = Move::from_name(&self.api, move_name.get(), self.generation).await?;
+        let move_ = Move::from_name(&self.api, &move_name, self.generation).await?;
         let move_display = MoveDisplay::new(&move_);
 
         printdoc! {
@@ -289,10 +272,10 @@ impl Program {
     }
 
     async fn run_ability(&self, name: String) -> Result<()> {
-        let resource = Resource::Abilities.get_resource(&self.api).await?;
-        let ability_name = AbilityName::try_new(&name, &resource)?;
+        let resource = AbilityResource::try_new(&self.api).await?;
+        let ability_name = resource.validate(&name)?;
 
-        let ability = Ability::from_name(&self.api, ability_name.get(), self.generation).await?;
+        let ability = Ability::from_name(&self.api, &ability_name, self.generation).await?;
         let ability_display = AbilityDisplay::new(&ability);
 
         printdoc! {
@@ -304,9 +287,30 @@ impl Program {
         Ok(())
     }
 
-    async fn run_resource(&self, resource: Resource, delimiter: Option<String>) -> Result<()> {
+    async fn run_resource(&self, resource: ResourceArgs, delimiter: Option<String>) -> Result<()> {
         let delimiter = delimiter.unwrap_or("\n".to_string());
-        let resource = resource.get_resource(&self.api).await?.join(&delimiter);
+        let resource = match resource {
+            ResourceArgs::Pokemon => PokemonResource::try_new(&self.api)
+                .await?
+                .resource()
+                .join(&delimiter),
+            ResourceArgs::Moves => MoveResource::try_new(&self.api)
+                .await?
+                .resource()
+                .join(&delimiter),
+            ResourceArgs::Abilities => AbilityResource::try_new(&self.api)
+                .await?
+                .resource()
+                .join(&delimiter),
+            ResourceArgs::Types => TypeResource::try_new(&self.api)
+                .await?
+                .resource()
+                .join(&delimiter),
+            ResourceArgs::Games => GameResource::try_new(&self.api)
+                .await?
+                .resource()
+                .join(&delimiter),
+        };
 
         printdoc! {
             "
