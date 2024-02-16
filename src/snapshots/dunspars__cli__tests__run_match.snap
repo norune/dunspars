@@ -1,6 +1,6 @@
 ---
 source: src/cli.rs
-description: golem & pachirisu vs lapras x-y
+description: match golem pachirisu lapras --game x-y
 ---
 golem rock ground
 hp    atk   def   satk  sdef  spd   total

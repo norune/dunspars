@@ -434,7 +434,7 @@ mod tests {
             .unwrap();
 
         insta::with_settings!({
-            description => "ceruledge scarlet-violet",
+            description => "pokemon ceruledge --game scarlet-violet",
             omit_expression => true
         }, {
             insta::assert_snapshot!(output);
@@ -451,7 +451,7 @@ mod tests {
             .unwrap();
 
         insta::with_settings!({
-            description => "cascoon sword-shield",
+            description => "pokemon cascoon -e --game sword-shield",
             omit_expression => true
         }, {
             insta::assert_snapshot!(output);
@@ -468,7 +468,7 @@ mod tests {
             .unwrap();
 
         insta::with_settings!({
-            description => "blaziken scarlet-violet",
+            description => "pokemon blaziken -m --game scarlet-violet",
             omit_expression => true
         }, {
             insta::assert_snapshot!(output);
@@ -482,7 +482,7 @@ mod tests {
         let output = program.run_type(String::from("ice")).await.unwrap();
 
         insta::with_settings!({
-            description => "ice platinum",
+            description => "type ice --game platinum",
             omit_expression => true
         }, {
             insta::assert_snapshot!(output);
@@ -496,7 +496,7 @@ mod tests {
         let output = program.run_move(String::from("brick-break")).await.unwrap();
 
         insta::with_settings!({
-            description => "brick-break sun-moon",
+            description => "move brick-break --game sun-moon",
             omit_expression => true
         }, {
             insta::assert_snapshot!(output);
@@ -513,7 +513,7 @@ mod tests {
             .unwrap();
 
         insta::with_settings!({
-            description => "intimidate black-white",
+            description => "ability intimidate --game black-white",
             omit_expression => true
         }, {
             insta::assert_snapshot!(output);
@@ -534,7 +534,7 @@ mod tests {
             .unwrap();
 
         insta::with_settings!({
-            description => "golem & pachirisu vs lapras x-y",
+            description => "match golem pachirisu lapras --game x-y",
             omit_expression => true
         }, {
             insta::assert_snapshot!(output);

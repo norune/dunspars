@@ -1,6 +1,6 @@
 ---
 source: src/cli.rs
-description: brick-break sun-moon
+description: move brick-break --game sun-moon
 ---
 brick-break
 fighting physical

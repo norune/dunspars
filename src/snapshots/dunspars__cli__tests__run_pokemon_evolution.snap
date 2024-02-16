@@ -1,6 +1,6 @@
 ---
 source: src/cli.rs
-description: cascoon sword-shield
+description: pokemon cascoon -e --game sword-shield
 ---
 cascoon bug 
 shed-skin

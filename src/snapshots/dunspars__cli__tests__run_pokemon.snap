@@ -1,6 +1,6 @@
 ---
 source: src/cli.rs
-description: ceruledge scarlet-violet
+description: pokemon ceruledge --game scarlet-violet
 ---
 ceruledge fire ghost 
 flash-fire weak-armor(h)

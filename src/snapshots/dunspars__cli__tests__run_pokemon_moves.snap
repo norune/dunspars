@@ -1,6 +1,6 @@
 ---
 source: src/cli.rs
-description: blaziken scarlet-violet
+description: pokemon blaziken -m --game scarlet-violet
 ---
 blaziken fire fighting 
 blaze speed-boost(h)

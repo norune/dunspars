@@ -1,6 +1,6 @@
 ---
 source: src/cli.rs
-description: intimidate black-white
+description: ability intimidate --game black-white
 ---
 intimidate
 When this Pokémon enters battle, the opponent's Attack is lowered by one stage.  In a double battle, both opponents are affected.

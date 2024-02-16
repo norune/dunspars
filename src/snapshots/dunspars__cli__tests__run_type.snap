@@ -1,6 +1,6 @@
 ---
 source: src/cli.rs
-description: ice platinum
+description: type ice --game platinum
 ---
 ice offense
 double: dragon flying grass ground
