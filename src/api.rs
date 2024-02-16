@@ -1,5 +1,5 @@
+pub mod resource;
 mod utils;
-use utils::GenerationResource;
 
 use std::collections::HashMap;
 
@@ -27,11 +27,12 @@ use rustemon::model::pokemon::{
 use rustemon::model::resource::VerboseEffect as RustemonVerboseEffect;
 
 use crate::pokemon::{Ability, EvolutionStep, Move, PokemonData, PokemonGroup, Type, TypeChart};
+use resource::{GameResource, Resource};
 
 #[derive(Debug)]
 pub struct ApiWrapper {
     pub client: RustemonClient,
-    pub generation_resource: GenerationResource,
+    pub game_resource: GameResource,
     cache_manager: RustemonCacheManager,
 }
 
@@ -53,11 +54,11 @@ impl ApiWrapper {
             .with_mode(cache_mode)
             .try_build()?;
 
-        let generation_resource = GenerationResource::try_new(&client).await?;
+        let game_resource = GameResource::try_new(&client).await?;
 
         Ok(Self {
             client,
-            generation_resource,
+            game_resource,
             cache_manager,
         })
     }
@@ -74,7 +75,7 @@ impl ApiWrapper {
             ..
         } = rustemon_pokemon::get_by_name(pokemon, &self.client).await?;
 
-        let current_generation = self.generation_resource.get_gen_from_game(game);
+        let current_generation = self.game_resource.get_gen(game);
         let learn_moves = self.get_pokemon_moves(moves, current_generation);
         // PokéAPI doesn't seem to supply a field that denotes when a Pokémon was introduced.
         // So the next best thing is to check if they have any moves in the specified generation.
@@ -112,7 +113,7 @@ impl ApiWrapper {
         generation: u8,
     ) -> (String, Option<String>) {
         let pokemon_types =
-            utils::match_past(generation, past_types, &self.generation_resource).unwrap_or(types);
+            utils::match_past(generation, past_types, &self.game_resource).unwrap_or(types);
 
         let primary_type = pokemon_types
             .iter()
@@ -137,9 +138,7 @@ impl ApiWrapper {
         let mut learn_moves = HashMap::new();
         for move_ in moves {
             let learnable_move = move_.version_group_details.iter().find(|vg| {
-                let vg_gen = self
-                    .generation_resource
-                    .get_gen_from_game(&vg.version_group.name);
+                let vg_gen = self.game_resource.get_gen(&vg.version_group.name);
                 vg_gen == generation
             });
 
@@ -195,7 +194,7 @@ impl ApiWrapper {
         let relations = utils::match_past(
             current_generation,
             past_damage_relations,
-            &self.generation_resource,
+            &self.game_resource,
         )
         .unwrap_or(damage_relations);
 
@@ -259,7 +258,7 @@ impl ApiWrapper {
             .unwrap_or_default();
 
         if let Some(past_stats) =
-            utils::match_past(current_generation, past_values, &self.generation_resource)
+            utils::match_past(current_generation, past_values, &self.game_resource)
         {
             accuracy = past_stats.accuracy.or(accuracy);
             power = past_stats.power.or(power);
@@ -280,11 +279,9 @@ impl ApiWrapper {
             }
         }
 
-        if let Some(past_effects) = utils::match_past(
-            current_generation,
-            effect_changes,
-            &self.generation_resource,
-        ) {
+        if let Some(past_effects) =
+            utils::match_past(current_generation, effect_changes, &self.game_resource)
+        {
             if let Some(past_effect) = past_effects.into_iter().find(|e| e.language.name == "en") {
                 effect += format!(
                     "\n\nGeneration {current_generation}: {}",
@@ -329,11 +326,9 @@ impl ApiWrapper {
             .find(|e| e.language.name == "en")
             .unwrap_or_default();
 
-        if let Some(past_effects) = utils::match_past(
-            current_generation,
-            effect_changes,
-            &self.generation_resource,
-        ) {
+        if let Some(past_effects) =
+            utils::match_past(current_generation, effect_changes, &self.game_resource)
+        {
             if let Some(past_effect) = past_effects.into_iter().find(|e| e.language.name == "en") {
                 effect += format!(
                     "\n\nGeneration {current_generation}: {}",
@@ -378,168 +373,13 @@ impl ApiWrapper {
         url: &str,
         current_generation: u8,
     ) -> Result<()> {
-        let generation = self.generation_resource.get_gen_from_url(url);
+        let generation = self.game_resource.get_gen_from_url(url);
         if current_generation < generation {
             bail!(format!(
                 "{resource} '{label}' is not present in generation {current_generation}"
             ))
         }
         Ok(())
-    }
-}
-
-pub enum ResourceResult {
-    Valid,
-    Invalid(Vec<String>),
-}
-
-#[allow(async_fn_in_trait)]
-pub trait Resource: Sized {
-    fn get_matches(&self, value: &str) -> Vec<String> {
-        self.resource()
-            .iter()
-            .filter_map(|r| {
-                let close_enough = if !r.is_empty() && !value.is_empty() {
-                    let first_r = r.chars().next().unwrap();
-                    let first_value = value.chars().next().unwrap();
-
-                    // Only perform spellcheck on first character match; potentially expensive
-                    first_r == first_value && strsim::levenshtein(r, value) < 4
-                } else {
-                    false
-                };
-
-                if r.contains(value) || close_enough {
-                    Some(r.clone())
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<String>>()
-    }
-
-    fn check(&self, value: &str) -> ResourceResult {
-        let matches = self.get_matches(value);
-        if matches.iter().any(|m| *m == value) {
-            ResourceResult::Valid
-        } else {
-            ResourceResult::Invalid(matches)
-        }
-    }
-
-    fn validate(&self, value: &str) -> Result<String> {
-        let value = value.to_lowercase();
-        match self.check(&value) {
-            ResourceResult::Valid => Ok(value),
-            ResourceResult::Invalid(matches) => bail!(Self::invalid_message(&value, &matches)),
-        }
-    }
-
-    fn invalid_message(value: &str, matches: &[String]) -> String {
-        let resource_name = Self::label();
-        let mut message = format!("{resource_name} '{value}' not found.");
-
-        if matches.len() > 20 {
-            message += " Potential matches found; too many to display.";
-        } else if !matches.is_empty() {
-            message += &format!(" Potential matches: {}.", matches.join(" "));
-        }
-
-        message
-    }
-
-    async fn try_new(api: &ApiWrapper) -> Result<Self>;
-    fn resource(&self) -> &Vec<String>;
-    fn label() -> &'static str;
-}
-
-pub struct PokemonResource {
-    resource: Vec<String>,
-}
-impl Resource for PokemonResource {
-    async fn try_new(api: &ApiWrapper) -> Result<Self> {
-        let resource = utils::get_all_pokemon(&api.client).await?;
-        Ok(Self { resource })
-    }
-
-    fn resource(&self) -> &Vec<String> {
-        &self.resource
-    }
-
-    fn label() -> &'static str {
-        "Pokémon"
-    }
-}
-
-pub struct GameResource {
-    resource: Vec<String>,
-}
-impl Resource for GameResource {
-    async fn try_new(api: &ApiWrapper) -> Result<Self> {
-        let resource = utils::get_all_games(&api.client).await?;
-        Ok(Self { resource })
-    }
-
-    fn resource(&self) -> &Vec<String> {
-        &self.resource
-    }
-
-    fn label() -> &'static str {
-        "Game"
-    }
-}
-
-pub struct TypeResource {
-    resource: Vec<String>,
-}
-impl Resource for TypeResource {
-    async fn try_new(api: &ApiWrapper) -> Result<Self> {
-        let resource = utils::get_all_types(&api.client).await?;
-        Ok(Self { resource })
-    }
-
-    fn resource(&self) -> &Vec<String> {
-        &self.resource
-    }
-
-    fn label() -> &'static str {
-        "Type"
-    }
-}
-
-pub struct MoveResource {
-    resource: Vec<String>,
-}
-impl Resource for MoveResource {
-    async fn try_new(api: &ApiWrapper) -> Result<Self> {
-        let resource = utils::get_all_moves(&api.client).await?;
-        Ok(Self { resource })
-    }
-
-    fn resource(&self) -> &Vec<String> {
-        &self.resource
-    }
-
-    fn label() -> &'static str {
-        "Move"
-    }
-}
-
-pub struct AbilityResource {
-    resource: Vec<String>,
-}
-impl Resource for AbilityResource {
-    async fn try_new(api: &ApiWrapper) -> Result<Self> {
-        let resource = utils::get_all_abilities(&api.client).await?;
-        Ok(Self { resource })
-    }
-
-    fn resource(&self) -> &Vec<String> {
-        &self.resource
-    }
-
-    fn label() -> &'static str {
-        "Ability"
     }
 }
 

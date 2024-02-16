@@ -1,9 +1,4 @@
-use std::collections::HashMap;
-
-use anyhow::{bail, Result};
-use futures::stream::FuturesUnordered;
-use futures::StreamExt;
-use regex::Regex;
+use anyhow::Result;
 
 use rustemon::client::RustemonClient;
 use rustemon::games::version_group as rustemon_version;
@@ -23,65 +18,16 @@ use rustemon::model::pokemon::{
 };
 use rustemon::model::resource::Effect as RustemonEffect;
 
+use super::resource::GameResource;
 use crate::pokemon::{EvolutionMethod, EvolutionStep, Stats};
 
-#[derive(Debug)]
-pub struct GenerationResource {
-    gen_url_regex: Regex,
-    game_map: HashMap<String, u8>,
-}
-
-impl GenerationResource {
-    pub async fn try_new(client: &RustemonClient) -> Result<Self> {
-        // PokéAPI keeps generation names in Roman numerals.
-        // Might be quicker to just take it from resource urls via regex instead.
-        // Regex compilation is expensive, so we're compiling it just once here.
-        let gen_url_regex = Regex::new(r"generation/(?P<gen>\d+)/?$").unwrap();
-
-        let mut game_map = HashMap::new();
-        let game_names = get_all_games(client).await?;
-        let game_data_futures: FuturesUnordered<_> = game_names
-            .iter()
-            .map(|g| rustemon_version::get_by_name(g, client))
-            .collect();
-        let game_data: Vec<_> = game_data_futures.collect().await;
-
-        for game in game_data {
-            let game = game?;
-            let generation = capture_gen_url(&game.generation.url, &gen_url_regex).unwrap();
-            game_map.insert(game.name, generation);
-        }
-
-        Ok(GenerationResource {
-            game_map,
-            gen_url_regex,
-        })
-    }
-
-    pub fn get_gen_from_game(&self, game: &str) -> u8 {
-        *self.game_map.get(game).unwrap()
-    }
-
-    pub fn get_gen_from_url(&self, url: &str) -> u8 {
-        capture_gen_url(url, &self.gen_url_regex).unwrap()
-    }
-}
-
-fn capture_gen_url(url: &str, gen_url_regex: &Regex) -> Result<u8> {
-    if let Some(caps) = gen_url_regex.captures(url) {
-        Ok(caps["gen"].parse::<u8>()?)
-    } else {
-        bail!("Generation not found in resource url");
-    }
-}
-
 pub trait Past<T> {
-    fn generation(&self, resource: &GenerationResource) -> u8;
+    fn generation(&self, resource: &GameResource) -> u8;
     fn value(self) -> T;
 }
 
 impl Past<Vec<RustemonTypeSlot>> for RustemonPastPokemonType {
-    fn generation(&self, resource: &GenerationResource) -> u8 {
+    fn generation(&self, resource: &GameResource) -> u8 {
         resource.get_gen_from_url(&self.generation.url)
     }
 
@@ -91,7 +37,7 @@ impl Past<Vec<RustemonTypeSlot>> for RustemonPastPokemonType {
 }
 
 impl Past<RustemonTypeRelations> for RustemonPastTypeRelations {
-    fn generation(&self, resource: &GenerationResource) -> u8 {
+    fn generation(&self, resource: &GameResource) -> u8 {
         resource.get_gen_from_url(&self.generation.url)
     }
 
@@ -101,8 +47,8 @@ impl Past<RustemonTypeRelations> for RustemonPastTypeRelations {
 }
 
 impl Past<RustemonPastMoveStats> for RustemonPastMoveStats {
-    fn generation(&self, resource: &GenerationResource) -> u8 {
-        resource.get_gen_from_game(&self.version_group.name) - 1
+    fn generation(&self, resource: &GameResource) -> u8 {
+        resource.get_gen(&self.version_group.name) - 1
     }
 
     fn value(self) -> RustemonPastMoveStats {
@@ -111,8 +57,8 @@ impl Past<RustemonPastMoveStats> for RustemonPastMoveStats {
 }
 
 impl Past<Vec<RustemonEffect>> for RustemonPastAbilityEffect {
-    fn generation(&self, resource: &GenerationResource) -> u8 {
-        resource.get_gen_from_game(&self.version_group.name) - 1
+    fn generation(&self, resource: &GameResource) -> u8 {
+        resource.get_gen(&self.version_group.name) - 1
     }
 
     fn value(self) -> Vec<RustemonEffect> {
@@ -123,7 +69,7 @@ impl Past<Vec<RustemonEffect>> for RustemonPastAbilityEffect {
 pub fn match_past<T: Past<U>, U>(
     current_generation: u8,
     pasts: Vec<T>,
-    generation_resource: &GenerationResource,
+    generation_resource: &GameResource,
 ) -> Option<U> {
     let mut oldest_value = None;
     let mut oldest_generation = 255;

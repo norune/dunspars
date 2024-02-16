@@ -5,10 +5,10 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use indoc::printdoc;
 
-use crate::api::{
-    AbilityResource, ApiWrapper, GameResource, MoveResource, PokemonResource, Resource,
-    TypeResource,
+use crate::api::resource::{
+    AbilityResource, GameResource, MoveResource, PokemonResource, Resource, TypeResource,
 };
+use crate::api::ApiWrapper;
 use crate::pokemon::{Ability, Move, Pokemon, PokemonData, Type};
 use display::*;
 
@@ -98,13 +98,12 @@ pub async fn run() -> Result<()> {
     let cli = Cli::parse();
     let api = ApiWrapper::try_new().await?;
 
-    let game_resource = GameResource::try_new(&api).await?;
     // Default to the latest game
     let game_name = cli
         .game
-        .unwrap_or(game_resource.resource().last().unwrap().to_string());
-    let game = game_resource.validate(&game_name)?;
-    let generation = api.generation_resource.get_gen_from_game(&game);
+        .unwrap_or(api.game_resource.resource().last().unwrap().to_string());
+    let game = api.game_resource.validate(&game_name)?;
+    let generation = api.game_resource.get_gen(&game);
 
     let program = Program::new(game, generation, api);
 
@@ -148,7 +147,7 @@ impl Program {
     }
 
     async fn run_pokemon(&self, name: String, moves: bool, evolution: bool) -> Result<()> {
-        let resource = PokemonResource::try_new(&self.api).await?;
+        let resource = PokemonResource::try_new(&self.api.client).await?;
         let pokemon_name = resource.validate(&name)?;
 
         let pokemon = PokemonData::from_name(&self.api, &pokemon_name, &self.game).await?;
@@ -191,7 +190,7 @@ impl Program {
     }
 
     async fn run_type(&self, name: String) -> Result<()> {
-        let resource = TypeResource::try_new(&self.api).await?;
+        let resource = TypeResource::try_new(&self.api.client).await?;
         let type_name = resource.validate(&name)?;
 
         let Type {
@@ -220,7 +219,7 @@ impl Program {
         attacker_name: String,
         stab_only: bool,
     ) -> Result<()> {
-        let resource = PokemonResource::try_new(&self.api).await?;
+        let resource = PokemonResource::try_new(&self.api.client).await?;
 
         let attacker_name = resource.validate(&attacker_name)?;
         let attacker_data = PokemonData::from_name(&self.api, &attacker_name, &self.game).await?;
@@ -256,7 +255,7 @@ impl Program {
     }
 
     async fn run_move(&self, name: String) -> Result<()> {
-        let resource = MoveResource::try_new(&self.api).await?;
+        let resource = MoveResource::try_new(&self.api.client).await?;
         let move_name = resource.validate(&name)?;
 
         let move_ = Move::from_name(&self.api, &move_name, self.generation).await?;
@@ -272,7 +271,7 @@ impl Program {
     }
 
     async fn run_ability(&self, name: String) -> Result<()> {
-        let resource = AbilityResource::try_new(&self.api).await?;
+        let resource = AbilityResource::try_new(&self.api.client).await?;
         let ability_name = resource.validate(&name)?;
 
         let ability = Ability::from_name(&self.api, &ability_name, self.generation).await?;
@@ -290,23 +289,23 @@ impl Program {
     async fn run_resource(&self, resource: ResourceArgs, delimiter: Option<String>) -> Result<()> {
         let delimiter = delimiter.unwrap_or("\n".to_string());
         let resource = match resource {
-            ResourceArgs::Pokemon => PokemonResource::try_new(&self.api)
+            ResourceArgs::Pokemon => PokemonResource::try_new(&self.api.client)
                 .await?
                 .resource()
                 .join(&delimiter),
-            ResourceArgs::Moves => MoveResource::try_new(&self.api)
+            ResourceArgs::Moves => MoveResource::try_new(&self.api.client)
                 .await?
                 .resource()
                 .join(&delimiter),
-            ResourceArgs::Abilities => AbilityResource::try_new(&self.api)
+            ResourceArgs::Abilities => AbilityResource::try_new(&self.api.client)
                 .await?
                 .resource()
                 .join(&delimiter),
-            ResourceArgs::Types => TypeResource::try_new(&self.api)
+            ResourceArgs::Types => TypeResource::try_new(&self.api.client)
                 .await?
                 .resource()
                 .join(&delimiter),
-            ResourceArgs::Games => GameResource::try_new(&self.api)
+            ResourceArgs::Games => GameResource::try_new(&self.api.client)
                 .await?
                 .resource()
                 .join(&delimiter),
