@@ -1,0 +1,101 @@
+---
+source: src/cli.rs
+description: blaziken scarlet-violet
+---
+blaziken fire fighting 
+blaze speed-boost(h)
+hp    atk   def   satk  sdef  spd   total
+80    120   70    110   70    80    530   
+scarlet-violet gen-9
+
+defenses
+double: flying ground psychic water
+neutral: dragon electric fairy fighting ghost normal poison rock
+half: dark fire grass ice steel
+quarter: bug
+
+moves
+counter(s)           fighting physical   power: N/A  accuracy: 100  pp: 20    egg 
+crush-claw           normal physical     power: 75   accuracy: 95   pp: 10    egg 
+ember(s)             fire special        power: 40   accuracy: 100  pp: 25    egg 
+feather-dance        flying status       power: N/A  accuracy: 100  pp: 15    egg 
+feint                normal physical     power: 30   accuracy: 100  pp: 10    egg 
+fire-punch(s)        fire physical       power: 75   accuracy: 100  pp: 15    egg 
+flamethrower(s)      fire special        power: 90   accuracy: 100  pp: 15    egg 
+last-resort          normal physical     power: 140  accuracy: 100  pp: 5     egg 
+night-slash          dark physical       power: 70   accuracy: 100  pp: 15    egg 
+peck                 flying physical     power: 35   accuracy: 100  pp: 35    egg 
+blaze-kick(s)        fire physical       power: 85   accuracy: 90   pp: 10    level-up evolve
+double-kick(s)       fighting physical   power: 30   accuracy: 100  pp: 30    level-up 1
+growl                normal status       power: N/A  accuracy: 100  pp: 40    level-up 1
+quick-attack         normal physical     power: 40   accuracy: 100  pp: 30    level-up 1
+scratch              normal physical     power: 40   accuracy: 100  pp: 35    level-up 1
+flame-charge(s)      fire physical       power: 50   accuracy: 100  pp: 20    level-up 9
+detect(s)            fighting status     power: N/A  accuracy: N/A  pp: 5     level-up 12
+sand-attack          ground status       power: N/A  accuracy: 100  pp: 15    level-up 15
+aerial-ace           flying physical     power: 60   accuracy: N/A  pp: 20    level-up 20
+slash                normal physical     power: 70   accuracy: 100  pp: 20    level-up 25
+bounce               flying physical     power: 85   accuracy: 85   pp: 5     level-up 30
+focus-energy         normal status       power: N/A  accuracy: N/A  pp: 30    level-up 35
+bulk-up(s)           fighting status     power: N/A  accuracy: N/A  pp: 20    level-up 42
+reversal(s)          fighting physical   power: N/A  accuracy: 100  pp: 15    level-up 49
+flare-blitz(s)       fire physical       power: 120  accuracy: 100  pp: 15    level-up 56
+brave-bird           flying physical     power: 120  accuracy: 100  pp: 15    level-up 63
+acrobatics           flying physical     power: 55   accuracy: 100  pp: 15    machine 
+agility              psychic status      power: N/A  accuracy: N/A  pp: 30    machine 
+aura-sphere(s)       fighting special    power: 80   accuracy: N/A  pp: 20    machine 
+baton-pass           normal status       power: N/A  accuracy: N/A  pp: 40    machine 
+blast-burn(s)        fire special        power: 150  accuracy: 90   pp: 5     machine 
+body-slam            normal physical     power: 85   accuracy: 100  pp: 15    machine 
+brick-break(s)       fighting physical   power: 75   accuracy: 100  pp: 15    machine 
+bulldoze             ground physical     power: 60   accuracy: 100  pp: 20    machine 
+close-combat(s)      fighting physical   power: 120  accuracy: 100  pp: 5     machine 
+coaching(s)          fighting status     power: N/A  accuracy: N/A  pp: 10    machine 
+curse                ghost status        power: N/A  accuracy: N/A  pp: 10    machine 
+dig                  ground physical     power: 80   accuracy: 100  pp: 10    machine 
+double-edge          normal physical     power: 120  accuracy: 100  pp: 15    machine 
+earthquake           ground physical     power: 100  accuracy: 100  pp: 10    machine 
+endure               normal status       power: N/A  accuracy: N/A  pp: 10    machine 
+facade               normal physical     power: 70   accuracy: 100  pp: 20    machine 
+fire-blast(s)        fire special        power: 110  accuracy: 85   pp: 5     machine 
+fire-pledge(s)       fire special        power: 80   accuracy: 100  pp: 10    machine 
+fire-spin(s)         fire special        power: 35   accuracy: 85   pp: 15    machine 
+fling                dark physical       power: N/A  accuracy: 100  pp: 10    machine 
+focus-blast(s)       fighting special    power: 120  accuracy: 70   pp: 5     machine 
+focus-punch(s)       fighting physical   power: 150  accuracy: 100  pp: 20    machine 
+giga-impact          normal physical     power: 150  accuracy: 90   pp: 5     machine 
+heat-crash(s)        fire physical       power: N/A  accuracy: 100  pp: 10    machine 
+heat-wave(s)         fire special        power: 95   accuracy: 90   pp: 10    machine 
+helping-hand         normal status       power: N/A  accuracy: N/A  pp: 20    machine 
+hyper-beam           normal special      power: 150  accuracy: 90   pp: 5     machine 
+knock-off            dark physical       power: 65   accuracy: 100  pp: 20    machine 
+low-kick(s)          fighting physical   power: N/A  accuracy: 100  pp: 20    machine 
+low-sweep(s)         fighting physical   power: 65   accuracy: 100  pp: 20    machine 
+mud-slap             ground special      power: 20   accuracy: 100  pp: 10    machine 
+overheat(s)          fire special        power: 130  accuracy: 90   pp: 5     machine 
+poison-jab           poison physical     power: 80   accuracy: 100  pp: 20    machine 
+protect              normal status       power: N/A  accuracy: N/A  pp: 10    machine 
+rest                 psychic status      power: N/A  accuracy: N/A  pp: 5     machine 
+roar                 normal status       power: N/A  accuracy: N/A  pp: 20    machine 
+rock-slide           rock physical       power: 75   accuracy: 90   pp: 10    machine 
+rock-tomb            rock physical       power: 60   accuracy: 95   pp: 15    machine 
+scorching-sands      ground special      power: 70   accuracy: 100  pp: 10    machine 
+shadow-claw          ghost physical      power: 70   accuracy: 100  pp: 15    machine 
+sleep-talk           normal status       power: N/A  accuracy: N/A  pp: 10    machine 
+solar-beam           grass special       power: 120  accuracy: 100  pp: 10    machine 
+stone-edge           rock physical       power: 100  accuracy: 80   pp: 5     machine 
+substitute           normal status       power: N/A  accuracy: N/A  pp: 10    machine 
+sunny-day(s)         fire status         power: N/A  accuracy: N/A  pp: 5     machine 
+swift                normal special      power: 60   accuracy: N/A  pp: 20    machine 
+swords-dance         normal status       power: N/A  accuracy: N/A  pp: 20    machine 
+take-down            normal physical     power: 90   accuracy: 85   pp: 20    machine 
+temper-flare(s)      fire physical       power: 75   accuracy: 100  pp: 10    machine 
+tera-blast           normal special      power: 80   accuracy: 100  pp: 10    machine 
+thief                dark physical       power: 60   accuracy: 100  pp: 25    machine 
+thunder-punch        electric physical   power: 75   accuracy: 100  pp: 15    machine 
+u-turn               bug physical        power: 70   accuracy: 100  pp: 20    machine 
+upper-hand(s)        fighting physical   power: 65   accuracy: 100  pp: 15    machine 
+uproar               normal special      power: 90   accuracy: 100  pp: 10    machine 
+vacuum-wave(s)       fighting special    power: 40   accuracy: 100  pp: 30    machine 
+will-o-wisp(s)       fire status         power: N/A  accuracy: 85   pp: 15    machine 
+

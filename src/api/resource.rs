@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use anyhow::{anyhow, bail, Result};
-use futures::stream::FuturesUnordered;
+use futures::stream::FuturesOrdered;
 use futures::StreamExt;
 use regex::Regex;
 
@@ -9,6 +9,7 @@ use rustemon::client::RustemonClient;
 use rustemon::games::version_group as rustemon_version;
 
 use super::utils;
+use crate::pokemon::Game;
 
 pub enum ResourceResult {
     Valid,
@@ -153,7 +154,7 @@ impl Resource for AbilityResource {
 
 #[derive(Debug)]
 pub struct GameResource {
-    resource: HashMap<String, u8>,
+    resource: HashMap<String, Game>,
     gen_url_regex: Regex,
 }
 impl Resource for GameResource {
@@ -165,16 +166,16 @@ impl Resource for GameResource {
 
         let mut resource = HashMap::new();
         let game_names = utils::get_all_games(client).await?;
-        let game_data_futures: FuturesUnordered<_> = game_names
+        let game_data_futures: FuturesOrdered<_> = game_names
             .iter()
             .map(|g| rustemon_version::get_by_name(g, client))
             .collect();
         let game_data: Vec<_> = game_data_futures.collect().await;
 
-        for game in game_data {
+        for (i, game) in game_data.into_iter().enumerate() {
             let game = game?;
             let generation = capture_gen_url(&game.generation.url, &gen_url_regex).unwrap();
-            resource.insert(game.name, generation);
+            resource.insert(game.name.clone(), Game::new(game.name, i as u8, generation));
         }
 
         Ok(Self {
@@ -184,9 +185,12 @@ impl Resource for GameResource {
     }
 
     fn resource(&self) -> Vec<String> {
-        self.resource
+        let mut games = self.resource.iter().map(|r| r.1).collect::<Vec<&Game>>();
+        games.sort_by_key(|g| g.order);
+
+        games
             .iter()
-            .map(|r| r.0.clone())
+            .map(|g| g.name.clone())
             .collect::<Vec<String>>()
     }
 
@@ -196,7 +200,7 @@ impl Resource for GameResource {
 }
 impl GameResource {
     pub fn get_gen(&self, game: &str) -> u8 {
-        *self.resource.get(game).unwrap()
+        self.resource.get(game).unwrap().generation
     }
 
     pub fn get_gen_from_url(&self, url: &str) -> u8 {

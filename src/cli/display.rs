@@ -2,9 +2,7 @@ use std::fmt;
 
 use indoc::writedoc;
 
-use crate::cli::utils::{
-    is_color_enabled, rate_number_to_color, Colors, DisplayComponent, Effects, WeaknessDisplay,
-};
+use crate::cli::utils::{rate_number_to_color, Colors, DisplayComponent, Effects, WeaknessDisplay};
 use crate::pokemon::{
     self, Ability, EvolutionMethod, EvolutionStep, Move, MoveList, Pokemon, PokemonData,
     PokemonGroup, Stats, TypeChart,
@@ -46,7 +44,7 @@ impl fmt::Display for PokemonDisplay<'_, '_> {
             PokemonGroup::Regular => "",
         };
 
-        let stats_display = StatsDisplay::new(stats);
+        let stats_display = StatsDisplay::new(stats, self.color_enabled);
         let abilities = abilities
             .iter()
             .map(|a| {
@@ -72,10 +70,10 @@ impl fmt::Display for PokemonDisplay<'_, '_> {
 }
 
 impl<'a, 'b> PokemonDisplay<'a, 'b> {
-    pub fn new(pokemon: &'a PokemonData<'b>) -> Self {
+    pub fn new(pokemon: &'a PokemonData<'b>, color_enabled: bool) -> Self {
         Self {
             pokemon,
-            color_enabled: is_color_enabled(),
+            color_enabled,
         }
     }
 }
@@ -123,17 +121,17 @@ impl fmt::Display for StatsDisplay<'_> {
 }
 
 impl<'a> StatsDisplay<'a> {
-    pub fn new(stats: &'a Stats) -> Self {
+    pub fn new(stats: &'a Stats, color_enabled: bool) -> Self {
         Self {
             stats,
-            color_enabled: is_color_enabled(),
+            color_enabled,
         }
     }
 }
 
 pub struct TypeChartDisplay<'a> {
     type_chart: &'a TypeChart,
-    label: &'static str,
+    label: String,
     color_enabled: bool,
 }
 
@@ -160,18 +158,19 @@ impl fmt::Display for TypeChartDisplay<'_> {
 }
 
 impl WeaknessDisplay<String> for TypeChartDisplay<'_> {
-    fn format_group(&self, label: &'static str, types: Vec<String>, color: Colors) -> String {
+    fn format_group(&self, label: &'static str, mut types: Vec<String>, color: Colors) -> String {
+        types.sort();
         let style = self.fg(color);
         format!("\n{label}: {style}{}{style:#}", types.join(" "))
     }
 }
 
 impl<'a> TypeChartDisplay<'a> {
-    pub fn new(type_chart: &'a TypeChart, label: &'static str) -> Self {
+    pub fn new(type_chart: &'a TypeChart, label: String, color_enabled: bool) -> Self {
         Self {
             type_chart,
             label,
-            color_enabled: is_color_enabled(),
+            color_enabled,
         }
     }
 }
@@ -190,13 +189,19 @@ impl DisplayComponent for MoveWeaknessDisplay<'_, '_> {
 }
 
 impl<'a, 'b> WeaknessDisplay<&'a Move<'b>> for MoveWeaknessDisplay<'a, 'b> {
-    fn format_group(&self, label: &'static str, moves: Vec<&'a Move<'b>>, color: Colors) -> String {
+    fn format_group(
+        &self,
+        label: &'static str,
+        mut moves: Vec<&'a Move<'b>>,
+        color: Colors,
+    ) -> String {
         let mut output = format!("\n{label}: ");
 
         let style = self.color().fg(color);
         let normal_color = style.ansi();
         let stab_color = style.effect(Effects::Underline).ansi();
 
+        moves.sort_by_key(|m| m.name.clone());
         for move_ in moves {
             let damage_class = match move_.damage_class.as_str() {
                 "special" => "s",
@@ -241,12 +246,17 @@ impl fmt::Display for MoveWeaknessDisplay<'_, '_> {
 }
 
 impl<'a, 'b> MoveWeaknessDisplay<'a, 'b> {
-    pub fn new(defender: &'a Pokemon<'b>, attacker: &'a Pokemon<'b>, stab_only: bool) -> Self {
+    pub fn new(
+        defender: &'a Pokemon<'b>,
+        attacker: &'a Pokemon<'b>,
+        stab_only: bool,
+        color_enabled: bool,
+    ) -> Self {
         Self {
             defender,
             attacker,
             stab_only,
-            color_enabled: is_color_enabled(),
+            color_enabled,
         }
     }
 }
@@ -266,22 +276,30 @@ impl DisplayComponent for MatchDisplay<'_, '_> {
 
 impl fmt::Display for MatchDisplay<'_, '_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let defender_stats = StatsDisplay::new(&self.defender.data.stats);
-        let attacker_stats = StatsDisplay::new(&self.attacker.data.stats);
+        let defender_stats = StatsDisplay::new(&self.defender.data.stats, self.color_enabled);
+        let attacker_stats = StatsDisplay::new(&self.attacker.data.stats, self.color_enabled);
 
         let defender_moves_header = format!(
             "{}'s moves vs {}",
             self.attacker.data.name, self.defender.data.name
         );
-        let defender_weaknesses =
-            MoveWeaknessDisplay::new(self.defender, self.attacker, self.stab_only);
+        let defender_weaknesses = MoveWeaknessDisplay::new(
+            self.defender,
+            self.attacker,
+            self.stab_only,
+            self.color_enabled,
+        );
 
         let attacker_moves_header = format!(
             "{}'s moves vs {}",
             self.defender.data.name, self.attacker.data.name
         );
-        let attacker_weaknesses =
-            MoveWeaknessDisplay::new(self.attacker, self.defender, self.stab_only);
+        let attacker_weaknesses = MoveWeaknessDisplay::new(
+            self.attacker,
+            self.defender,
+            self.stab_only,
+            self.color_enabled,
+        );
 
         writedoc! {
             f,
@@ -305,12 +323,17 @@ impl fmt::Display for MatchDisplay<'_, '_> {
 }
 
 impl<'a, 'b> MatchDisplay<'a, 'b> {
-    pub fn new(defender: &'a Pokemon<'b>, attacker: &'a Pokemon<'b>, stab_only: bool) -> Self {
+    pub fn new(
+        defender: &'a Pokemon<'b>,
+        attacker: &'a Pokemon<'b>,
+        stab_only: bool,
+        color_enabled: bool,
+    ) -> Self {
         MatchDisplay {
             defender,
             attacker,
             stab_only,
-            color_enabled: is_color_enabled(),
+            color_enabled,
         }
     }
 }
@@ -334,13 +357,27 @@ impl fmt::Display for MoveListDisplay<'_, '_, '_> {
             "{header}moves{header:#}",
             header = self.fg_effect(Colors::Header, Effects::Bold)
         )?;
-        let move_list = self.move_list.get_map();
+
+        let mut move_list = self
+            .pokemon
+            .learn_moves
+            .iter()
+            .map(|m| (m.0, &m.1 .0, m.1 .1))
+            .collect::<Vec<(&String, &String, i64)>>();
 
         if move_list.is_empty() {
             write!(f, "\nThere are no moves to display.\n")?;
+        } else {
+            // Sort by name, then by level, then by method
+            move_list.sort_by(|(a_name, a_method, a_level), (b_name, b_method, b_level)| {
+                a_method
+                    .cmp(b_method)
+                    .then(a_level.cmp(b_level))
+                    .then(a_name.cmp(b_name))
+            });
         }
 
-        for move_ in move_list {
+        for (name, learn_method, learn_level) in move_list {
             let Move {
                 name,
                 accuracy,
@@ -349,9 +386,9 @@ impl fmt::Display for MoveListDisplay<'_, '_, '_> {
                 damage_class,
                 type_,
                 ..
-            } = move_.1;
+            } = self.move_list.get_map().get(name).unwrap();
 
-            let stab = if pokemon::is_stab(&move_.1.type_, self.pokemon) {
+            let stab = if pokemon::is_stab(type_, self.pokemon) {
                 "(s)"
             } else {
                 ""
@@ -373,16 +410,12 @@ impl fmt::Display for MoveListDisplay<'_, '_, '_> {
                 "N/A".to_string()
             };
 
-            let default_learn = ("".to_string(), 0i64);
-            let (learn_method, level) = self
-                .pokemon
-                .learn_moves
-                .get(move_.0)
-                .unwrap_or(&default_learn);
-            let learn_level = if *level == 0i64 {
-                "".to_string()
+            let level = if learn_level == 0i64 && learn_method == "level-up" {
+                "evolve".to_string()
+            } else if learn_method == "level-up" {
+                learn_level.to_string()
             } else {
-                level.to_string()
+                "".to_string()
             };
 
             let move_name = format!(
@@ -405,7 +438,7 @@ impl fmt::Display for MoveListDisplay<'_, '_, '_> {
 
             writedoc! {
                 f,
-                "\n{move_name:name_space$}{move_type:type_space$}{move_stats:stats_space$}{learn_method} {learn_level}",
+                "\n{move_name:name_space$}{move_type:type_space$}{move_stats:stats_space$}{learn_method} {level}",
             }?;
         }
 
@@ -414,11 +447,15 @@ impl fmt::Display for MoveListDisplay<'_, '_, '_> {
 }
 
 impl<'a, 'b, 'c> MoveListDisplay<'a, 'b, 'c> {
-    pub fn new(move_list: &'a MoveList<'c>, pokemon: &'b PokemonData<'c>) -> Self {
+    pub fn new(
+        move_list: &'a MoveList<'c>,
+        pokemon: &'b PokemonData<'c>,
+        color_enabled: bool,
+    ) -> Self {
         MoveListDisplay {
             move_list,
             pokemon,
-            color_enabled: is_color_enabled(),
+            color_enabled,
         }
     }
 }
@@ -489,10 +526,10 @@ impl fmt::Display for MoveDisplay<'_, '_> {
 }
 
 impl<'a, 'b> MoveDisplay<'a, 'b> {
-    pub fn new(move_: &'a Move<'b>) -> Self {
+    pub fn new(move_: &'a Move<'b>, color_enabled: bool) -> Self {
         MoveDisplay {
             move_,
-            color_enabled: is_color_enabled(),
+            color_enabled,
         }
     }
 }
@@ -522,10 +559,10 @@ impl fmt::Display for AbilityDisplay<'_, '_> {
 }
 
 impl<'a, 'b> AbilityDisplay<'a, 'b> {
-    pub fn new(ability: &'a Ability<'b>) -> Self {
+    pub fn new(ability: &'a Ability<'b>, color_enabled: bool) -> Self {
         AbilityDisplay {
             ability,
-            color_enabled: is_color_enabled(),
+            color_enabled,
         }
     }
 }
@@ -554,10 +591,10 @@ impl fmt::Display for EvolutionStepDisplay<'_> {
 }
 
 impl<'a> EvolutionStepDisplay<'a> {
-    pub fn new(evolution_step: &'a EvolutionStep) -> Self {
+    pub fn new(evolution_step: &'a EvolutionStep, color_enabled: bool) -> Self {
         EvolutionStepDisplay {
             evolution_step,
-            color_enabled: is_color_enabled(),
+            color_enabled,
         }
     }
 

@@ -1,0 +1,22 @@
+---
+source: src/cli.rs
+description: cascoon sword-shield
+---
+cascoon bug 
+shed-skin
+hp    atk   def   satk  sdef  spd   total
+50    35    55    25    25    15    205   
+sword-shield gen-8
+
+defenses
+double: fire flying rock
+neutral: bug dark dragon electric fairy ghost ice normal poison psychic steel water
+half: fighting grass ground
+
+evolution
+wurmple 
+  silcoon level-up level-7
+    beautifly level-up level-10
+  cascoon level-up level-7
+    dustox level-up level-10
+

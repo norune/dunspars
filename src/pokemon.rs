@@ -375,3 +375,20 @@ pub fn is_stab(type_: &str, pokemon: &PokemonData) -> bool {
         type_ == pokemon.primary_type
     }
 }
+
+#[derive(Debug)]
+pub struct Game {
+    pub name: String,
+    pub order: u8,
+    pub generation: u8,
+}
+
+impl Game {
+    pub fn new(name: String, order: u8, generation: u8) -> Self {
+        Self {
+            name,
+            order,
+            generation,
+        }
+    }
+}

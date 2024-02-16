@@ -1,0 +1,14 @@
+---
+source: src/cli.rs
+description: ice platinum
+---
+ice offense
+double: dragon flying grass ground
+neutral: bug dark electric fairy fighting ghost normal poison psychic rock
+half: fire ice steel water
+
+ice defense
+double: fighting fire rock steel
+neutral: bug dark dragon electric fairy flying ghost grass ground normal poison psychic water
+half: ice
+
