@@ -1,0 +1,91 @@
+---
+source: src/api.rs
+expression: cascoon
+---
+name: wurmple
+methods: []
+evolves_to:
+  - name: silcoon
+    methods:
+      - trigger: level-up
+        item: ~
+        gender: ~
+        held_item: ~
+        known_move: ~
+        known_move_type: ~
+        location: ~
+        min_level: 7
+        min_happiness: ~
+        min_beauty: ~
+        min_affection: ~
+        needs_overworld_rain: ~
+        party_species: ~
+        party_type: ~
+        relative_physical_stats: ~
+        time_of_day: ~
+        trade_species: ~
+        turn_upside_down: ~
+    evolves_to:
+      - name: beautifly
+        methods:
+          - trigger: level-up
+            item: ~
+            gender: ~
+            held_item: ~
+            known_move: ~
+            known_move_type: ~
+            location: ~
+            min_level: 10
+            min_happiness: ~
+            min_beauty: ~
+            min_affection: ~
+            needs_overworld_rain: ~
+            party_species: ~
+            party_type: ~
+            relative_physical_stats: ~
+            time_of_day: ~
+            trade_species: ~
+            turn_upside_down: ~
+        evolves_to: []
+  - name: cascoon
+    methods:
+      - trigger: level-up
+        item: ~
+        gender: ~
+        held_item: ~
+        known_move: ~
+        known_move_type: ~
+        location: ~
+        min_level: 7
+        min_happiness: ~
+        min_beauty: ~
+        min_affection: ~
+        needs_overworld_rain: ~
+        party_species: ~
+        party_type: ~
+        relative_physical_stats: ~
+        time_of_day: ~
+        trade_species: ~
+        turn_upside_down: ~
+    evolves_to:
+      - name: dustox
+        methods:
+          - trigger: level-up
+            item: ~
+            gender: ~
+            held_item: ~
+            known_move: ~
+            known_move_type: ~
+            location: ~
+            min_level: 10
+            min_happiness: ~
+            min_beauty: ~
+            min_affection: ~
+            needs_overworld_rain: ~
+            party_species: ~
+            party_type: ~
+            relative_physical_stats: ~
+            time_of_day: ~
+            trade_species: ~
+            turn_upside_down: ~
+        evolves_to: []

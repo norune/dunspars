@@ -2,6 +2,7 @@ use std::io::{stdout, IsTerminal};
 
 use indoc::formatdoc;
 
+#[derive(Debug, PartialEq)]
 pub enum Colors {
     Header,
     Red,
@@ -14,6 +15,20 @@ pub enum Colors {
 }
 
 impl Colors {
+    pub fn rate(number: i64, ceiling: i64) -> Self {
+        let number = number as f64;
+        let ceiling = ceiling as f64;
+
+        match number {
+            number if number > ceiling * 0.83 => Colors::Red,
+            number if number > ceiling * 0.66 => Colors::Orange,
+            number if number > ceiling * 0.50 => Colors::Yellow,
+            number if number > ceiling * 0.33 => Colors::Green,
+            number if number > ceiling * 0.16 => Colors::Blue,
+            _ => Colors::Violet,
+        }
+    }
+
     fn get(&self) -> Option<anstyle::Color> {
         match self {
             Colors::Header => Some(anstyle::Ansi256Color(10).into()),
@@ -83,16 +98,16 @@ impl Style {
 }
 
 pub trait DisplayComponent: std::fmt::Display {
-    fn color(&self) -> Style {
+    fn style(&self) -> Style {
         Style::new(self.color_enabled())
     }
 
-    fn fg(&self, color: Colors) -> anstyle::Style {
-        self.color().fg(color).ansi()
+    fn color(&self, color: Colors) -> anstyle::Style {
+        self.style().fg(color).ansi()
     }
 
-    fn fg_effect(&self, color: Colors, effect: Effects) -> anstyle::Style {
-        self.color().fg(color).effect(effect).ansi()
+    fn color_effect(&self, color: Colors, effect: Effects) -> anstyle::Style {
+        self.style().fg(color).effect(effect).ansi()
     }
 
     fn color_enabled(&self) -> bool;
@@ -124,20 +139,6 @@ pub fn is_env_affirmative(value: &str) -> bool {
 
 pub fn is_terminal() -> bool {
     stdout().is_terminal()
-}
-
-pub fn rate_number_to_color(number: i64, ceiling: i64) -> Colors {
-    let number = number as f64;
-    let ceiling = ceiling as f64;
-
-    match number {
-        number if number > ceiling * 0.83 => Colors::Red,
-        number if number > ceiling * 0.66 => Colors::Orange,
-        number if number > ceiling * 0.50 => Colors::Yellow,
-        number if number > ceiling * 0.33 => Colors::Green,
-        number if number > ceiling * 0.16 => Colors::Blue,
-        _ => Colors::Violet,
-    }
 }
 
 pub trait WeaknessDisplay<T> {
@@ -205,8 +206,14 @@ pub trait WeaknessDisplay<T> {
             other = self.format_group("other", weakness_groups.other, Colors::Yellow);
         }
 
-        formatdoc! {
+        let output = formatdoc! {
             "{quad}{double}{neutral}{half}{quarter}{zero}{other}"
+        };
+
+        if !output.is_empty() {
+            output
+        } else {
+            String::from("\nNone")
         }
     }
 
@@ -221,4 +228,57 @@ pub struct WeaknessGroups<T> {
     pub quarter: Vec<T>,
     pub zero: Vec<T>,
     pub other: Vec<T>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn colors_rate() {
+        // Test when number is greater than 83% of the ceiling
+        assert_eq!(Colors::Red, Colors::rate(84, 100));
+
+        // Test when number is between 66% and 83% of the ceiling
+        assert_eq!(Colors::Orange, Colors::rate(70, 100));
+
+        // Test when number is between 50% and 66% of the ceiling
+        assert_eq!(Colors::Yellow, Colors::rate(60, 100));
+
+        // Test when number is between 33% and 50% of the ceiling
+        assert_eq!(Colors::Green, Colors::rate(40, 100));
+
+        // Test when number is between 16% and 33% of the ceiling
+        assert_eq!(Colors::Blue, Colors::rate(20, 100));
+
+        // Test when number is less than 16% of the ceiling
+        assert_eq!(Colors::Violet, Colors::rate(10, 100));
+    }
+
+    #[test]
+    fn colors_ansi() {
+        let orange = Style::new(false).fg(Colors::Orange).ansi();
+        assert_eq!("plain text", format!("{orange}plain text{orange:#}"));
+
+        let red = Style::new(true).fg(Colors::Red).ansi();
+        assert_eq!(
+            "\u{1b}[38;5;160mRed\u{1b}[0mRum",
+            format!("{red}Red{red:#}Rum")
+        );
+
+        let header_bold = Style::new(true)
+            .fg(Colors::Header)
+            .effect(Effects::Bold)
+            .ansi();
+        assert_eq!(
+            "\u{1b}[1m\u{1b}[38;5;10mheader\u{1b}[0m",
+            format!("{header_bold}header{header_bold:#}")
+        );
+
+        let blue_bg = Style::new(true).bg(Colors::Blue).ansi();
+        assert_eq!(
+            "lucy in the \u{1b}[48;5;33msky\u{1b}[0m",
+            format!("lucy in the {blue_bg}sky{blue_bg:#}")
+        );
+    }
 }

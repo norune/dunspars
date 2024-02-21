@@ -1,0 +1,20 @@
+---
+source: src/cli.rs
+description: pokemon politoed --evolution --game sword-shield
+---
+politoed water 
+water-absorb damp drizzle(h)
+hp    atk   def   satk  sdef  spd   total
+90    75    75    90    100   70    500   
+sword-shield gen-8
+
+defenses
+double: electric grass
+neutral: bug dark dragon fairy fighting flying ghost ground normal poison psychic rock
+half: fire ice steel water
+
+evolution
+poliwag 
+  poliwhirl level-up level-25
+    poliwrath use-item water-stone
+    politoed trade kings-rock

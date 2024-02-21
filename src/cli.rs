@@ -54,6 +54,9 @@ enum Commands {
         /// Display only moves that match the user's type
         #[arg(short, long, action = clap::ArgAction::SetTrue)]
         stab_only: bool,
+        /// Display verbose output
+        #[arg(short, long, action = clap::ArgAction::SetTrue)]
+        verbose: bool,
     },
     /// Prints data about a Pokémon type
     Type {
@@ -132,9 +135,12 @@ pub async fn run() -> Result<()> {
             defenders,
             attacker,
             stab_only,
+            verbose,
         } => print!(
             "{}",
-            program.run_match(defenders, attacker, stab_only).await?
+            program
+                .run_match(defenders, attacker, verbose, stab_only)
+                .await?
         ),
         Commands::Resource {
             resource,
@@ -297,6 +303,7 @@ impl Program {
         &self,
         defender_names: Vec<String>,
         attacker_name: String,
+        verbose: bool,
         stab_only: bool,
     ) -> Result<String> {
         let resource = PokemonResource::try_new(&self.api.client).await?;
@@ -323,8 +330,13 @@ impl Program {
 
         let mut output = String::from("");
         for defender in defenders {
-            let match_display =
-                MatchDisplay::new(&defender, &attacker, stab_only, self.config.color_enabled);
+            let match_display = MatchDisplay::new(
+                &defender,
+                &attacker,
+                verbose,
+                stab_only,
+                self.config.color_enabled,
+            );
             output += formatdoc! {
                 "
                 {match_display}
@@ -446,16 +458,40 @@ mod tests {
     async fn run_pokemon_evolution() {
         let program = setup_program("sword-shield").await;
 
-        let output = program
+        let cascoon = program
             .run_pokemon(String::from("cascoon"), false, true)
             .await
             .unwrap();
 
         insta::with_settings!({
-            description => "pokemon cascoon -e --game sword-shield",
+            description => "pokemon cascoon --evolution --game sword-shield",
             omit_expression => true
         }, {
-            insta::assert_snapshot!(output);
+            insta::assert_snapshot!(cascoon);
+        });
+
+        let politoed = program
+            .run_pokemon(String::from("politoed"), false, true)
+            .await
+            .unwrap();
+
+        insta::with_settings!({
+            description => "pokemon politoed --evolution --game sword-shield",
+            omit_expression => true
+        }, {
+            insta::assert_snapshot!(politoed);
+        });
+
+        let applin = program
+            .run_pokemon(String::from("applin"), false, true)
+            .await
+            .unwrap();
+
+        insta::with_settings!({
+            description => "pokemon applin --evolution --game sword-shield",
+            omit_expression => true
+        }, {
+            insta::assert_snapshot!(applin);
         });
     }
 
@@ -469,7 +505,7 @@ mod tests {
             .unwrap();
 
         insta::with_settings!({
-            description => "pokemon blaziken -m --game scarlet-violet",
+            description => "pokemon blaziken --moves --game scarlet-violet",
             omit_expression => true
         }, {
             insta::assert_snapshot!(output);
@@ -524,13 +560,21 @@ mod tests {
     #[tokio::test]
     async fn run_match() {
         let program = setup_program("x-y").await;
+        let defenders = vec![String::from("golem"), String::from("pachirisu")];
+        let attacker = String::from("lapras");
 
-        let output = program
-            .run_match(
-                vec![String::from("golem"), String::from("pachirisu")],
-                String::from("lapras"),
-                false,
-            )
+        let non_verbose = program
+            .run_match(defenders.clone(), attacker.clone(), false, false)
+            .await
+            .unwrap();
+
+        let stab_only = program
+            .run_match(defenders.clone(), attacker.clone(), false, true)
+            .await
+            .unwrap();
+
+        let verbose = program
+            .run_match(defenders.clone(), attacker.clone(), true, false)
             .await
             .unwrap();
 
@@ -538,7 +582,21 @@ mod tests {
             description => "match golem pachirisu lapras --game x-y",
             omit_expression => true
         }, {
-            insta::assert_snapshot!(output);
+            insta::assert_snapshot!(non_verbose);
+        });
+
+        insta::with_settings!({
+            description => "match golem pachirisu lapras --stab-only --game x-y",
+            omit_expression => true
+        }, {
+            insta::assert_snapshot!(stab_only);
+        });
+
+        insta::with_settings!({
+            description => "match golem pachirisu lapras --verbose --game x-y",
+            omit_expression => true
+        }, {
+            insta::assert_snapshot!(verbose);
         });
     }
 }

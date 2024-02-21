@@ -215,7 +215,7 @@ impl<'a> Ability<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
 pub struct EvolutionStep {
     pub name: String,
     pub methods: Vec<EvolutionMethod>,
@@ -236,7 +236,7 @@ impl EvolutionStep {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
 pub struct EvolutionMethod {
     pub trigger: String,
     pub item: Option<String>,

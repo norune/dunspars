@@ -12,13 +12,9 @@ hp    atk   def   satk  sdef  spd   total
 lapras's moves vs golem
 quad: aqua-tail(p) brine(s) dive(p) hydro-pump(s) surf(s) water-gun(s) water-pulse(s) waterfall(p) whirlpool(s) 
 double: avalanche(p) blizzard(s) bulldoze(p) drill-run(p) fissure(p) freeze-dry(s) frost-breath(s) ice-beam(s) ice-shard(p) icy-wind(s) iron-head(p) iron-tail(p) rock-smash(p) sheer-cold(s) 
-neutral: dragon-pulse(s) dream-eater(s) future-sight(s) outrage(p) psychic(s) signal-beam(s) zen-headbutt(p) 
-half: ancient-power(s) body-slam(p) echoed-voice(s) facade(p) frustration(p) giga-impact(p) hidden-power(s) horn-drill(p) hyper-beam(s) hyper-voice(s) return(p) round(s) secret-power(p) snore(s) strength(p) 
-zero: shock-wave(s) thunder(s) thunderbolt(s) 
 
 golem's moves vs lapras
 double: brick-break(p) focus-blast(s) focus-punch(p) power-up-punch(p) rock-blast(p) rock-slide(p) rock-smash(p) rock-throw(p) rock-tomb(p) smack-down(p) stone-edge(p) superpower(p) thunder-punch(p) 
-neutral: bulldoze(p) dig(p) double-edge(p) earth-power(s) earthquake(p) explosion(p) facade(p) fire-blast(s) fire-punch(p) flamethrower(s) fling(p) frustration(p) giga-impact(p) gyro-ball(p) heavy-slam(p) hidden-power(s) hyper-beam(s) incinerate(s) iron-head(p) magnitude(p) return(p) round(s) secret-power(p) self-destruct(p) snore(s) steamroller(p) strength(p) tackle(p) 
 
 
 pachirisu electric 
@@ -30,12 +26,6 @@ hp    atk   def   satk  sdef  spd   total
 
 lapras's moves vs pachirisu
 double: bulldoze(p) drill-run(p) fissure(p) 
-neutral: ancient-power(s) aqua-tail(p) avalanche(p) blizzard(s) body-slam(p) brine(s) dive(p) dragon-pulse(s) dream-eater(s) echoed-voice(s) facade(p) freeze-dry(s) frost-breath(s) frustration(p) future-sight(s) giga-impact(p) hidden-power(s) horn-drill(p) hydro-pump(s) hyper-beam(s) hyper-voice(s) ice-beam(s) ice-shard(p) icy-wind(s) outrage(p) psychic(s) return(p) rock-smash(p) round(s) secret-power(p) sheer-cold(s) signal-beam(s) snore(s) strength(p) surf(s) water-gun(s) water-pulse(s) waterfall(p) whirlpool(s) zen-headbutt(p) 
-half: iron-head(p) iron-tail(p) shock-wave(s) thunder(s) thunderbolt(s) 
 
 pachirisu's moves vs lapras
-double: charge-beam(s) discharge(s) electro-ball(s) electroweb(s) grass-knot(s) nuzzle(p) rollout(p) seed-bomb(p) shock-wave(s) spark(p) thunder(s) thunder-punch(p) thunderbolt(s) volt-switch(s) 
-neutral: bide(p) bite(p) covet(p) cut(p) dig(p) echoed-voice(s) facade(p) flail(p) fling(p) frustration(p) gunk-shot(p) hidden-power(s) hyper-fang(p) iron-tail(p) last-resort(p) quick-attack(p) return(p) round(s) secret-power(p) snore(s) super-fang(p) swift(s) u-turn(p) uproar(s) 
-
-
-
+double: charge-beam(s) discharge(s) electro-ball(s) electroweb(s) grass-knot(s) nuzzle(p) rollout(p) seed-bomb(p) shock-wave(s) spark(p) thunder(s) thunder-punch(p) thunderbolt(s) volt-switch(s)

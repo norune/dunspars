@@ -2,7 +2,7 @@ use std::fmt;
 
 use indoc::writedoc;
 
-use crate::cli::utils::{rate_number_to_color, Colors, DisplayComponent, Effects, WeaknessDisplay};
+use crate::cli::utils::{Colors, DisplayComponent, Effects, WeaknessDisplay};
 use crate::pokemon::{
     self, Ability, EvolutionMethod, EvolutionStep, Move, MoveList, Pokemon, PokemonData,
     PokemonGroup, Stats, TypeChart,
@@ -63,8 +63,8 @@ impl fmt::Display for PokemonDisplay<'_, '_> {
             {abilities}
             {stats_display}
             {game} gen-{generation}",
-            header = self.fg_effect(Colors::Header, Effects::Bold),
-            yellow = self.fg(Colors::Yellow),
+            header = self.color_effect(Colors::Header, Effects::Bold),
+            yellow = self.color(Colors::Yellow),
         }
     }
 }
@@ -102,14 +102,14 @@ impl fmt::Display for StatsDisplay<'_> {
         let total = hp + attack + defense + special_attack + special_defense + speed;
 
         // 255 is the actual stat ceiling, but 200 is the ceiling for the vast majority of pokemon
-        let hp_color = self.fg(rate_number_to_color(*hp, 200));
-        let at_color = self.fg(rate_number_to_color(*attack, 200));
-        let df_color = self.fg(rate_number_to_color(*defense, 200));
-        let sat_color = self.fg(rate_number_to_color(*special_attack, 200));
-        let sdf_color = self.fg(rate_number_to_color(*special_defense, 200));
-        let spd_color = self.fg(rate_number_to_color(*speed, 200));
+        let hp_color = self.color(Colors::rate(*hp, 200));
+        let at_color = self.color(Colors::rate(*attack, 200));
+        let df_color = self.color(Colors::rate(*defense, 200));
+        let sat_color = self.color(Colors::rate(*special_attack, 200));
+        let sdf_color = self.color(Colors::rate(*special_defense, 200));
+        let spd_color = self.color(Colors::rate(*speed, 200));
         // 720 is based on Arceus' total stats
-        let total_color = self.fg_effect(rate_number_to_color(total, 720), Effects::Bold);
+        let total_color = self.color_effect(Colors::rate(total, 720), Effects::Bold);
 
         writedoc! {
             f,
@@ -151,7 +151,7 @@ impl fmt::Display for TypeChartDisplay<'_> {
         writedoc! {
             f,
             "{header}{label}{header:#}{type_chart}",
-            header = self.fg_effect(Colors::Header, Effects::Bold),
+            header = self.color_effect(Colors::Header, Effects::Bold),
             label = self.label,
         }
     }
@@ -160,7 +160,7 @@ impl fmt::Display for TypeChartDisplay<'_> {
 impl WeaknessDisplay<String> for TypeChartDisplay<'_> {
     fn format_group(&self, label: &'static str, mut types: Vec<String>, color: Colors) -> String {
         types.sort();
-        let style = self.fg(color);
+        let style = self.color(color);
         format!("\n{label}: {style}{}{style:#}", types.join(" "))
     }
 }
@@ -178,6 +178,7 @@ impl<'a> TypeChartDisplay<'a> {
 pub struct MoveWeaknessDisplay<'a, 'b> {
     defender: &'a Pokemon<'b>,
     attacker: &'a Pokemon<'b>,
+    verbose: bool,
     stab_only: bool,
     color_enabled: bool,
 }
@@ -197,7 +198,7 @@ impl<'a, 'b> WeaknessDisplay<&'a Move<'b>> for MoveWeaknessDisplay<'a, 'b> {
     ) -> String {
         let mut output = format!("\n{label}: ");
 
-        let style = self.color().fg(color);
+        let style = self.style().fg(color);
         let normal_color = style.ansi();
         let stab_color = style.effect(Effects::Underline).ansi();
 
@@ -227,10 +228,13 @@ impl<'a, 'b> WeaknessDisplay<&'a Move<'b>> for MoveWeaknessDisplay<'a, 'b> {
 impl fmt::Display for MoveWeaknessDisplay<'_, '_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let weakness_groups = self.group_by_weakness(self.attacker.move_list.get_map(), |move_| {
+            let multiplier = self.defender.defense_chart.get_multiplier(&move_.1.type_);
+
             let stab_qualified =
                 !self.stab_only || pokemon::is_stab(&move_.1.type_, &self.attacker.data);
-            if move_.1.damage_class != "status" && stab_qualified {
-                let multiplier = self.defender.defense_chart.get_multiplier(&move_.1.type_);
+            let verbose_qualified = self.verbose || multiplier >= 2.0;
+
+            if move_.1.damage_class != "status" && stab_qualified && verbose_qualified {
                 Some((move_.1, multiplier))
             } else {
                 None
@@ -249,12 +253,14 @@ impl<'a, 'b> MoveWeaknessDisplay<'a, 'b> {
     pub fn new(
         defender: &'a Pokemon<'b>,
         attacker: &'a Pokemon<'b>,
+        verbose: bool,
         stab_only: bool,
         color_enabled: bool,
     ) -> Self {
         Self {
             defender,
             attacker,
+            verbose,
             stab_only,
             color_enabled,
         }
@@ -264,6 +270,7 @@ impl<'a, 'b> MoveWeaknessDisplay<'a, 'b> {
 pub struct MatchDisplay<'a, 'b> {
     defender: &'a Pokemon<'b>,
     attacker: &'a Pokemon<'b>,
+    verbose: bool,
     stab_only: bool,
     color_enabled: bool,
 }
@@ -286,6 +293,7 @@ impl fmt::Display for MatchDisplay<'_, '_> {
         let defender_weaknesses = MoveWeaknessDisplay::new(
             self.defender,
             self.attacker,
+            self.verbose,
             self.stab_only,
             self.color_enabled,
         );
@@ -297,6 +305,7 @@ impl fmt::Display for MatchDisplay<'_, '_> {
         let attacker_weaknesses = MoveWeaknessDisplay::new(
             self.attacker,
             self.defender,
+            self.verbose,
             self.stab_only,
             self.color_enabled,
         );
@@ -317,7 +326,7 @@ impl fmt::Display for MatchDisplay<'_, '_> {
             attacker_header = &self.attacker.data.name,
             attacker_primary_type = self.attacker.data.primary_type,
             attacker_secondary_type = self.attacker.data.secondary_type.as_deref().unwrap_or(""),
-            header = self.fg_effect(Colors::Header, Effects::Bold),
+            header = self.color_effect(Colors::Header, Effects::Bold),
         }
     }
 }
@@ -326,12 +335,14 @@ impl<'a, 'b> MatchDisplay<'a, 'b> {
     pub fn new(
         defender: &'a Pokemon<'b>,
         attacker: &'a Pokemon<'b>,
+        verbose: bool,
         stab_only: bool,
         color_enabled: bool,
     ) -> Self {
         MatchDisplay {
             defender,
             attacker,
+            verbose,
             stab_only,
             color_enabled,
         }
@@ -355,7 +366,7 @@ impl fmt::Display for MoveListDisplay<'_, '_, '_> {
         write!(
             f,
             "{header}moves{header:#}",
-            header = self.fg_effect(Colors::Header, Effects::Bold)
+            header = self.color_effect(Colors::Header, Effects::Bold)
         )?;
 
         let mut move_list = self
@@ -420,14 +431,14 @@ impl fmt::Display for MoveListDisplay<'_, '_, '_> {
 
             let move_name = format!(
                 "{green}{name}{green:#}{stab}",
-                green = self.fg(Colors::Green)
+                green = self.color(Colors::Green)
             );
             let move_type = format!("{type_} {damage_class}");
             let move_stats = format!(
                 "power: {red}{power:3}{red:#}  accuracy: {green}{accuracy:3}{green:#}  pp: {blue}{pp:2}{blue:#}",
-                green = self.fg(Colors::Green),
-                red = self.fg(Colors::Red),
-                blue = self.fg(Colors::Blue),
+                green = self.color(Colors::Green),
+                red = self.color(Colors::Red),
+                blue = self.color(Colors::Blue),
             );
 
             let (name_space, type_space, stats_space) = if self.color_enabled {
@@ -503,9 +514,9 @@ impl fmt::Display for MoveDisplay<'_, '_> {
 
         let stats = format!(
             "power: {red}{power:3}{red:#}  accuracy: {green}{accuracy:3}{green:#}  pp: {blue}{pp:3}{blue:#}",
-            red = self.fg(Colors::Red),
-            green = self.fg(Colors::Green),
-            blue = self.fg(Colors::Blue),
+            red = self.color(Colors::Red),
+            green = self.color(Colors::Green),
+            blue = self.color(Colors::Blue),
         );
 
         let effect_text = if let Some(chance) = effect_chance {
@@ -520,7 +531,7 @@ impl fmt::Display for MoveDisplay<'_, '_> {
             {type_} {damage_class}
             {stats}
             {effect_text}",
-            header = self.fg_effect(Colors::Header, Effects::Bold)
+            header = self.color_effect(Colors::Header, Effects::Bold)
         }
     }
 }
@@ -553,7 +564,7 @@ impl fmt::Display for AbilityDisplay<'_, '_> {
             f,
             "{header}{name}{header:#}
             {effect}",
-            header = self.fg_effect(Colors::Header, Effects::Bold)
+            header = self.color_effect(Colors::Header, Effects::Bold)
         }
     }
 }
@@ -583,7 +594,7 @@ impl fmt::Display for EvolutionStepDisplay<'_> {
         writeln!(
             f,
             "{header}evolution{header:#}",
-            header = self.fg_effect(Colors::Header, Effects::Bold)
+            header = self.color_effect(Colors::Header, Effects::Bold)
         )?;
         self.traverse_dfs(f, self.evolution_step, 0)?;
         Ok(())
@@ -624,7 +635,7 @@ impl<'a> EvolutionStepDisplay<'a> {
             f,
             "{indentation}{green}{species}{green:#} {methods}",
             indentation = "  ".repeat(depth),
-            green = self.fg(Colors::Green),
+            green = self.color(Colors::Green),
             species = step.name
         )
     }
@@ -658,7 +669,7 @@ impl<'a> EvolutionStepDisplay<'a> {
             trade_species,
             turn_upside_down,
         } = method;
-        let mut output = format!("{blue}{trigger}{blue:#}", blue = self.fg(Colors::Blue));
+        let mut output = format!("{blue}{trigger}{blue:#}", blue = self.color(Colors::Blue));
 
         if let Some(item) = item {
             output += &format!(" {item}");

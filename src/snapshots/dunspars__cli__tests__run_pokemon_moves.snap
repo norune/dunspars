@@ -1,6 +1,6 @@
 ---
 source: src/cli.rs
-description: pokemon blaziken -m --game scarlet-violet
+description: pokemon blaziken --moves --game scarlet-violet
 ---
 blaziken fire fighting 
 blaze speed-boost(h)
@@ -97,5 +97,4 @@ u-turn               bug physical        power: 70   accuracy: 100  pp: 20    ma
 upper-hand(s)        fighting physical   power: 65   accuracy: 100  pp: 15    machine 
 uproar               normal special      power: 90   accuracy: 100  pp: 10    machine 
 vacuum-wave(s)       fighting special    power: 40   accuracy: 100  pp: 30    machine 
-will-o-wisp(s)       fire status         power: N/A  accuracy: 85   pp: 15    machine 
-
+will-o-wisp(s)       fire status         power: N/A  accuracy: 85   pp: 15    machine

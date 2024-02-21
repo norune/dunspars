@@ -26,7 +26,9 @@ use rustemon::model::pokemon::{
 };
 use rustemon::model::resource::VerboseEffect as RustemonVerboseEffect;
 
-use crate::pokemon::{Ability, EvolutionStep, Move, PokemonData, PokemonGroup, Type, TypeChart};
+use crate::pokemon::{
+    Ability, EvolutionStep, Move, PokemonData, PokemonGroup, Stats, Type, TypeChart,
+};
 use resource::{GameResource, GetGeneration, Resource};
 
 #[derive(Debug)]
@@ -99,7 +101,7 @@ impl ApiWrapper {
             abilities,
             species: species.name,
             group,
-            stats: utils::extract_stats(stats),
+            stats: Stats::from(stats),
             game: game.to_string(),
             generation: current_generation,
             api: self,
@@ -354,7 +356,7 @@ impl ApiWrapper {
             .unwrap()
             .follow(&self.client)
             .await?;
-        let evolution_step = utils::traverse_chain(chain);
+        let evolution_step = EvolutionStep::from(chain);
 
         Ok(evolution_step)
     }
@@ -470,5 +472,19 @@ mod tests {
         assert_eq!("normal", clefairy_gen_5.primary_type);
         let clefairy_gen_6 = api.get_pokemon("clefairy", "x-y").await.unwrap();
         assert_eq!("fairy", clefairy_gen_6.primary_type);
+    }
+
+    #[tokio::test]
+    async fn get_evolution_steps() {
+        let api = ApiWrapper::try_new().await.unwrap();
+
+        let cascoon = api.get_evolution_steps("cascoon").await.unwrap();
+        insta::assert_yaml_snapshot!(cascoon);
+
+        let applin = api.get_evolution_steps("applin").await.unwrap();
+        insta::assert_yaml_snapshot!(applin);
+
+        let politoed = api.get_evolution_steps("politoed").await.unwrap();
+        insta::assert_yaml_snapshot!(politoed);
     }
 }

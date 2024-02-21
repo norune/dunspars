@@ -1,0 +1,23 @@
+---
+source: src/cli.rs
+description: pokemon applin --evolution --game sword-shield
+---
+applin grass dragon 
+ripen gluttony bulletproof(h)
+hp    atk   def   satk  sdef  spd   total
+40    40    80    40    40    20    260   
+sword-shield gen-8
+
+defenses
+quad: ice
+double: bug dragon fairy flying poison
+neutral: dark fighting fire ghost normal psychic rock steel
+half: ground
+quarter: electric grass water
+
+evolution
+applin 
+  flapple use-item tart-apple
+  appletun use-item sweet-apple
+  dipplin 
+    hydrapple

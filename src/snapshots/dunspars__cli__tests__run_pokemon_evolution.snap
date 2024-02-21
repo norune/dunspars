@@ -1,6 +1,6 @@
 ---
 source: src/cli.rs
-description: pokemon cascoon -e --game sword-shield
+description: pokemon cascoon --evolution --game sword-shield
 ---
 cascoon bug 
 shed-skin
@@ -19,4 +19,3 @@ wurmple
     beautifly level-up level-10
   cascoon level-up level-7
     dustox level-up level-10
-

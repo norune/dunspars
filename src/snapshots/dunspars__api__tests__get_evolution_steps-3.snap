@@ -1,0 +1,70 @@
+---
+source: src/api.rs
+expression: politoed
+---
+name: poliwag
+methods: []
+evolves_to:
+  - name: poliwhirl
+    methods:
+      - trigger: level-up
+        item: ~
+        gender: ~
+        held_item: ~
+        known_move: ~
+        known_move_type: ~
+        location: ~
+        min_level: 25
+        min_happiness: ~
+        min_beauty: ~
+        min_affection: ~
+        needs_overworld_rain: ~
+        party_species: ~
+        party_type: ~
+        relative_physical_stats: ~
+        time_of_day: ~
+        trade_species: ~
+        turn_upside_down: ~
+    evolves_to:
+      - name: poliwrath
+        methods:
+          - trigger: use-item
+            item: water-stone
+            gender: ~
+            held_item: ~
+            known_move: ~
+            known_move_type: ~
+            location: ~
+            min_level: ~
+            min_happiness: ~
+            min_beauty: ~
+            min_affection: ~
+            needs_overworld_rain: ~
+            party_species: ~
+            party_type: ~
+            relative_physical_stats: ~
+            time_of_day: ~
+            trade_species: ~
+            turn_upside_down: ~
+        evolves_to: []
+      - name: politoed
+        methods:
+          - trigger: trade
+            item: ~
+            gender: ~
+            held_item: kings-rock
+            known_move: ~
+            known_move_type: ~
+            location: ~
+            min_level: ~
+            min_happiness: ~
+            min_beauty: ~
+            min_affection: ~
+            needs_overworld_rain: ~
+            party_species: ~
+            party_type: ~
+            relative_physical_stats: ~
+            time_of_day: ~
+            trade_species: ~
+            turn_upside_down: ~
+        evolves_to: []
