@@ -126,13 +126,16 @@ pub fn is_terminal() -> bool {
     stdout().is_terminal()
 }
 
-pub fn rate_number_to_color(stat: f64, ceiling: f64) -> Colors {
-    match stat {
-        stat if stat > ceiling * 0.83 => Colors::Red,
-        stat if stat > ceiling * 0.66 => Colors::Orange,
-        stat if stat > ceiling * 0.50 => Colors::Yellow,
-        stat if stat > ceiling * 0.33 => Colors::Green,
-        stat if stat > ceiling * 0.16 => Colors::Blue,
+pub fn rate_number_to_color(number: i64, ceiling: i64) -> Colors {
+    let number = number as f64;
+    let ceiling = ceiling as f64;
+
+    match number {
+        number if number > ceiling * 0.83 => Colors::Red,
+        number if number > ceiling * 0.66 => Colors::Orange,
+        number if number > ceiling * 0.50 => Colors::Yellow,
+        number if number > ceiling * 0.33 => Colors::Green,
+        number if number > ceiling * 0.16 => Colors::Blue,
         _ => Colors::Violet,
     }
 }

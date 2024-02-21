@@ -18,58 +18,58 @@ use rustemon::model::pokemon::{
 };
 use rustemon::model::resource::Effect as RustemonEffect;
 
-use super::resource::GameResource;
+use super::resource::GetGeneration;
 use crate::pokemon::{EvolutionMethod, EvolutionStep, Stats};
 
 pub trait Past<T> {
-    fn generation(&self, resource: &GameResource) -> u8;
-    fn value(self) -> T;
+    fn generation(&self, resource: &impl GetGeneration) -> u8;
+    fn value(&self) -> T;
 }
 
 impl Past<Vec<RustemonTypeSlot>> for RustemonPastPokemonType {
-    fn generation(&self, resource: &GameResource) -> u8 {
+    fn generation(&self, resource: &impl GetGeneration) -> u8 {
         resource.get_gen_from_url(&self.generation.url)
     }
 
-    fn value(self) -> Vec<RustemonTypeSlot> {
-        self.types
+    fn value(&self) -> Vec<RustemonTypeSlot> {
+        self.types.clone()
     }
 }
 
 impl Past<RustemonTypeRelations> for RustemonPastTypeRelations {
-    fn generation(&self, resource: &GameResource) -> u8 {
+    fn generation(&self, resource: &impl GetGeneration) -> u8 {
         resource.get_gen_from_url(&self.generation.url)
     }
 
-    fn value(self) -> RustemonTypeRelations {
-        self.damage_relations
+    fn value(&self) -> RustemonTypeRelations {
+        self.damage_relations.clone()
     }
 }
 
 impl Past<RustemonPastMoveStats> for RustemonPastMoveStats {
-    fn generation(&self, resource: &GameResource) -> u8 {
+    fn generation(&self, resource: &impl GetGeneration) -> u8 {
         resource.get_gen(&self.version_group.name) - 1
     }
 
-    fn value(self) -> RustemonPastMoveStats {
-        self
+    fn value(&self) -> RustemonPastMoveStats {
+        self.clone()
     }
 }
 
 impl Past<Vec<RustemonEffect>> for RustemonPastAbilityEffect {
-    fn generation(&self, resource: &GameResource) -> u8 {
+    fn generation(&self, resource: &impl GetGeneration) -> u8 {
         resource.get_gen(&self.version_group.name) - 1
     }
 
-    fn value(self) -> Vec<RustemonEffect> {
-        self.effect_entries
+    fn value(&self) -> Vec<RustemonEffect> {
+        self.effect_entries.clone()
     }
 }
 
 pub fn match_past<T: Past<U>, U>(
     current_generation: u8,
-    pasts: Vec<T>,
-    generation_resource: &GameResource,
+    pasts: &[T],
+    generation_resource: &impl GetGeneration,
 ) -> Option<U> {
     let mut oldest_value = None;
     let mut oldest_generation = 255;
@@ -221,4 +221,49 @@ pub fn extract_stats(stats_vec: Vec<RustemonStat>) -> Stats {
     }
 
     stats
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct MockPast {
+        gen: u8,
+        value: u8,
+    }
+
+    impl Past<u8> for MockPast {
+        fn generation(&self, _resource: &impl GetGeneration) -> u8 {
+            self.gen
+        }
+
+        fn value(&self) -> u8 {
+            self.value
+        }
+    }
+
+    struct MockResource;
+    impl GetGeneration for MockResource {
+        fn get_gen(&self, _game: &str) -> u8 {
+            0
+        }
+        fn get_gen_from_url(&self, _url: &str) -> u8 {
+            0
+        }
+    }
+
+    #[test]
+    fn test_match_past() {
+        let mock_resource = MockResource;
+        let pasts = vec![
+            MockPast { gen: 3, value: 3 },
+            MockPast { gen: 4, value: 4 },
+            MockPast { gen: 2, value: 2 },
+        ];
+
+        assert_eq!(match_past(3, &pasts, &mock_resource), Some(3));
+        assert_eq!(match_past(9, &pasts, &mock_resource), None);
+        assert_eq!(match_past(4, &pasts, &mock_resource), Some(4));
+        assert_eq!(match_past(1, &pasts, &mock_resource), Some(2));
+    }
 }

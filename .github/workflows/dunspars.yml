@@ -32,6 +32,9 @@ jobs:
     - name: build
       run: cargo build --config $RELEASE_CONFIG --release --verbose
 
+    - name: test
+      run: cargo test --verbose
+
     - name: archive
       run: tar -czvf dunspars_$RELEASE_VERSION.tar.gz -C target/release dunspars ../../README.md ../../LICENSE
 

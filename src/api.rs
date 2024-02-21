@@ -27,7 +27,7 @@ use rustemon::model::pokemon::{
 use rustemon::model::resource::VerboseEffect as RustemonVerboseEffect;
 
 use crate::pokemon::{Ability, EvolutionStep, Move, PokemonData, PokemonGroup, Type, TypeChart};
-use resource::{GameResource, Resource};
+use resource::{GameResource, GetGeneration, Resource};
 
 #[derive(Debug)]
 pub struct ApiWrapper {
@@ -113,7 +113,7 @@ impl ApiWrapper {
         generation: u8,
     ) -> (String, Option<String>) {
         let pokemon_types =
-            utils::match_past(generation, past_types, &self.game_resource).unwrap_or(types);
+            utils::match_past(generation, &past_types, &self.game_resource).unwrap_or(types);
 
         let primary_type = pokemon_types
             .iter()
@@ -193,7 +193,7 @@ impl ApiWrapper {
 
         let relations = utils::match_past(
             current_generation,
-            past_damage_relations,
+            &past_damage_relations,
             &self.game_resource,
         )
         .unwrap_or(damage_relations);
@@ -258,7 +258,7 @@ impl ApiWrapper {
             .unwrap_or_default();
 
         if let Some(past_stats) =
-            utils::match_past(current_generation, past_values, &self.game_resource)
+            utils::match_past(current_generation, &past_values, &self.game_resource)
         {
             accuracy = past_stats.accuracy.or(accuracy);
             power = past_stats.power.or(power);
@@ -280,7 +280,7 @@ impl ApiWrapper {
         }
 
         if let Some(past_effects) =
-            utils::match_past(current_generation, effect_changes, &self.game_resource)
+            utils::match_past(current_generation, &effect_changes, &self.game_resource)
         {
             if let Some(past_effect) = past_effects.into_iter().find(|e| e.language.name == "en") {
                 effect += format!(
@@ -327,7 +327,7 @@ impl ApiWrapper {
             .unwrap_or_default();
 
         if let Some(past_effects) =
-            utils::match_past(current_generation, effect_changes, &self.game_resource)
+            utils::match_past(current_generation, &effect_changes, &self.game_resource)
         {
             if let Some(past_effect) = past_effects.into_iter().find(|e| e.language.name == "en") {
                 effect += format!(

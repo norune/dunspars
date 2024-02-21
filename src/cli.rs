@@ -6,7 +6,8 @@ use clap::{Parser, Subcommand};
 use indoc::{formatdoc, printdoc};
 
 use crate::api::resource::{
-    AbilityResource, GameResource, MoveResource, PokemonResource, Resource, TypeResource,
+    AbilityResource, GameResource, GetGeneration, MoveResource, PokemonResource, Resource,
+    TypeResource,
 };
 use crate::api::ApiWrapper;
 use crate::pokemon::{Ability, Move, Pokemon, PokemonData, Type};

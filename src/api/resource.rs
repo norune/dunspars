@@ -198,12 +198,17 @@ impl Resource for GameResource {
         "Game"
     }
 }
-impl GameResource {
-    pub fn get_gen(&self, game: &str) -> u8 {
+pub trait GetGeneration {
+    fn get_gen(&self, game: &str) -> u8;
+    fn get_gen_from_url(&self, url: &str) -> u8;
+}
+
+impl GetGeneration for GameResource {
+    fn get_gen(&self, game: &str) -> u8 {
         self.resource.get(game).unwrap().generation
     }
 
-    pub fn get_gen_from_url(&self, url: &str) -> u8 {
+    fn get_gen_from_url(&self, url: &str) -> u8 {
         capture_gen_url(url, &self.gen_url_regex).unwrap()
     }
 }

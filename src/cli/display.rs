@@ -101,15 +101,15 @@ impl fmt::Display for StatsDisplay<'_> {
         } = self.stats;
         let total = hp + attack + defense + special_attack + special_defense + speed;
 
-        // 255 is the actual stat ceiling, but Blissey/Chansey's HP is the only stat that exceeds 200
-        let hp_color = self.fg(rate_number_to_color(*hp as f64, 200f64));
-        let at_color = self.fg(rate_number_to_color(*attack as f64, 200f64));
-        let df_color = self.fg(rate_number_to_color(*defense as f64, 200f64));
-        let sat_color = self.fg(rate_number_to_color(*special_attack as f64, 200f64));
-        let sdf_color = self.fg(rate_number_to_color(*special_defense as f64, 200f64));
-        let spd_color = self.fg(rate_number_to_color(*speed as f64, 200f64));
-        // 720 is based on Arceus' total stats; highest as of this writing
-        let total_color = self.fg_effect(rate_number_to_color(total as f64, 720f64), Effects::Bold);
+        // 255 is the actual stat ceiling, but 200 is the ceiling for the vast majority of pokemon
+        let hp_color = self.fg(rate_number_to_color(*hp, 200));
+        let at_color = self.fg(rate_number_to_color(*attack, 200));
+        let df_color = self.fg(rate_number_to_color(*defense, 200));
+        let sat_color = self.fg(rate_number_to_color(*special_attack, 200));
+        let sdf_color = self.fg(rate_number_to_color(*special_defense, 200));
+        let spd_color = self.fg(rate_number_to_color(*speed, 200));
+        // 720 is based on Arceus' total stats
+        let total_color = self.fg_effect(rate_number_to_color(total, 720), Effects::Bold);
 
         writedoc! {
             f,
