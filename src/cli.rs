@@ -11,6 +11,7 @@ use crate::api::resource::{
 };
 use crate::api::ApiWrapper;
 use crate::pokemon::{Ability, Move, Pokemon, PokemonData, Type};
+use display::typechart::TypeChartContext;
 use display::*;
 
 const VERSION: &str = env!("DUNSPARS_VERSION");
@@ -57,6 +58,12 @@ enum Commands {
         /// Display verbose output
         #[arg(short, long, action = clap::ArgAction::SetTrue)]
         verbose: bool,
+    },
+    /// Prints type coverage based on the provided Pokémon
+    Coverage {
+        /// Names of Pokémon; max 6
+        #[arg(required = true, num_args = 1..=6)]
+        pokemon: Vec<String>,
     },
     /// Prints data about a Pokémon type
     Type {
@@ -142,6 +149,7 @@ pub async fn run() -> Result<()> {
                 .run_match(defenders, attacker, verbose, stab_only)
                 .await?
         ),
+        Commands::Coverage { pokemon } => print!("{}", program.run_coverage(pokemon).await?),
         Commands::Resource {
             resource,
             delimiter,
@@ -221,14 +229,15 @@ impl Program {
         let pokemon_name = resource.validate(&name)?;
 
         let pokemon = PokemonData::from_name(&self.api, &pokemon_name, &self.config.game).await?;
-        let pokemon_display = PokemonDisplay::new(&pokemon, self.config.color_enabled);
+        let pokemon_display = DisplayComponent2::new(&pokemon, self.config.color_enabled);
 
         let defense_chart = pokemon.get_defense_chart().await?;
-        let type_chart_display = TypeChartDisplay::new(
-            &defense_chart,
-            "defenses".to_string(),
-            self.config.color_enabled,
-        );
+        let defense_chart_ctx = TypeChartContext {
+            type_chart: defense_chart,
+            label: "defenses".to_string(),
+        };
+        let type_chart_display =
+            DisplayComponent2::new(&defense_chart_ctx, self.config.color_enabled);
 
         let mut output = formatdoc! {
             "
@@ -277,16 +286,19 @@ impl Program {
             ..
         } = Type::from_name(&self.api, &type_name, self.config.generation).await?;
 
-        let offense_chart_display = TypeChartDisplay::new(
-            &offense_chart,
-            format!("{type_name} offense"),
-            self.config.color_enabled,
-        );
-        let defense_chart_display = TypeChartDisplay::new(
-            &defense_chart,
-            format!("{type_name} defense"),
-            self.config.color_enabled,
-        );
+        let offense_chart_ctx = TypeChartContext {
+            type_chart: offense_chart,
+            label: format!("{type_name} offense"),
+        };
+        let offense_chart_display =
+            DisplayComponent2::new(&offense_chart_ctx, self.config.color_enabled);
+
+        let defense_chart_ctx = TypeChartContext {
+            type_chart: defense_chart,
+            label: format!("{type_name} defense"),
+        };
+        let defense_chart_display =
+            DisplayComponent2::new(&defense_chart_ctx, self.config.color_enabled);
 
         let output = formatdoc! {
             "
@@ -347,6 +359,20 @@ impl Program {
             .as_str();
         }
 
+        Ok(output)
+    }
+
+    async fn run_coverage(&self, names: Vec<String>) -> Result<String> {
+        let resource = PokemonResource::try_new(&self.api.client).await?;
+        let mut pokemon = vec![];
+
+        for name in names {
+            let name = resource.validate(&name)?;
+            let data = PokemonData::from_name(&self.api, &name, &self.config.game).await?;
+            pokemon.push(data);
+        }
+
+        let output = String::from("");
         Ok(output)
     }
 

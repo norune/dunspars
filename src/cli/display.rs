@@ -1,177 +1,139 @@
+mod pokemon_data;
+mod stats;
+pub mod typechart;
+
 use std::fmt;
 
 use indoc::writedoc;
 
-use crate::cli::utils::{Colors, DisplayComponent, Effects, WeaknessDisplay};
+use crate::cli::utils::{DisplayComponent, WeaknessDisplay};
 use crate::pokemon::{
     self, Ability, EvolutionMethod, EvolutionStep, Move, MoveList, Pokemon, PokemonData,
-    PokemonGroup, Stats, TypeChart,
 };
 
-pub struct PokemonDisplay<'a, 'b> {
-    pokemon: &'a PokemonData<'b>,
+pub struct DisplayComponent2<T> {
+    context: T,
     color_enabled: bool,
 }
 
-impl DisplayComponent for PokemonDisplay<'_, '_> {
-    fn color_enabled(&self) -> bool {
-        self.color_enabled
-    }
-}
-
-impl fmt::Display for PokemonDisplay<'_, '_> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let PokemonData {
-            name,
-            game,
-            generation,
-            primary_type,
-            secondary_type,
-            group,
-            stats,
-            abilities,
-            ..
-        } = self.pokemon;
-
-        let secondary_type = match secondary_type {
-            Some(type_) => format!(" {type_} "),
-            None => " ".to_string(),
-        };
-
-        let group = match group {
-            PokemonGroup::Mythical => "mythical",
-            PokemonGroup::Legendary => "legendary",
-            PokemonGroup::Regular => "",
-        };
-
-        let stats_display = StatsDisplay::new(stats, self.color_enabled);
-        let abilities = abilities
-            .iter()
-            .map(|a| {
-                if a.1 {
-                    format!("{}(h)", a.0)
-                } else {
-                    a.0.clone()
-                }
-            })
-            .collect::<Vec<_>>()
-            .join(" ");
-
-        writedoc! {
-            f,
-            "{header}{name}{header:#} {primary_type}{secondary_type}{yellow}{group}{yellow:#}
-            {abilities}
-            {stats_display}
-            {game} gen-{generation}",
-            header = self.color_effect(Colors::Header, Effects::Bold),
-            yellow = self.color(Colors::Yellow),
-        }
-    }
-}
-
-impl<'a, 'b> PokemonDisplay<'a, 'b> {
-    pub fn new(pokemon: &'a PokemonData<'b>, color_enabled: bool) -> Self {
+impl<T> DisplayComponent2<T> {
+    pub fn new(context: T, color_enabled: bool) -> Self {
         Self {
-            pokemon,
+            context,
             color_enabled,
         }
     }
+
+    pub fn style(&self) -> Style {
+        Style::new(self.color_enabled)
+    }
+
+    pub fn ansi(&self, color: Colors) -> anstyle::Style {
+        self.style().fg(color).ansi()
+    }
+
+    pub fn ansi_bold(&self, color: Colors) -> anstyle::Style {
+        self.style().fg(color).effect(Effects::Bold).ansi()
+    }
+
+    #[allow(dead_code)]
+    pub fn ansi_underline(&self, color: Colors) -> anstyle::Style {
+        self.style().fg(color).effect(Effects::Underline).ansi()
+    }
 }
 
-pub struct StatsDisplay<'a> {
-    stats: &'a Stats,
+#[derive(Debug, PartialEq)]
+pub enum Colors {
+    Header,
+    Red,
+    Orange,
+    Yellow,
+    Green,
+    Cyan,
+    Blue,
+    Violet,
+}
+
+impl Colors {
+    pub fn rate(number: i64, ceiling: i64) -> Self {
+        let number = number as f64;
+        let ceiling = ceiling as f64;
+
+        match number {
+            number if number > ceiling * 0.83 => Colors::Red,
+            number if number > ceiling * 0.66 => Colors::Orange,
+            number if number > ceiling * 0.50 => Colors::Yellow,
+            number if number > ceiling * 0.33 => Colors::Green,
+            number if number > ceiling * 0.16 => Colors::Blue,
+            _ => Colors::Violet,
+        }
+    }
+
+    fn get(&self) -> Option<anstyle::Color> {
+        match self {
+            Colors::Header => Some(anstyle::Ansi256Color(10).into()),
+            Colors::Red => Some(anstyle::Ansi256Color(160).into()),
+            Colors::Orange => Some(anstyle::Ansi256Color(172).into()),
+            Colors::Yellow => Some(anstyle::Ansi256Color(184).into()),
+            Colors::Green => Some(anstyle::Ansi256Color(77).into()),
+            Colors::Cyan => Some(anstyle::Ansi256Color(43).into()),
+            Colors::Blue => Some(anstyle::Ansi256Color(33).into()),
+            Colors::Violet => Some(anstyle::Ansi256Color(99).into()),
+        }
+    }
+}
+
+pub enum Effects {
+    Bold,
+    Underline,
+}
+
+impl Effects {
+    fn get(&self) -> anstyle::Effects {
+        match self {
+            Effects::Bold => anstyle::Effects::BOLD,
+            Effects::Underline => anstyle::Effects::UNDERLINE,
+        }
+    }
+}
+
+pub struct Style {
+    style: anstyle::Style,
     color_enabled: bool,
 }
 
-impl DisplayComponent for StatsDisplay<'_> {
-    fn color_enabled(&self) -> bool {
-        self.color_enabled
-    }
-}
-
-impl fmt::Display for StatsDisplay<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let Stats {
-            hp,
-            attack,
-            defense,
-            special_attack,
-            special_defense,
-            speed,
-        } = self.stats;
-        let total = hp + attack + defense + special_attack + special_defense + speed;
-
-        // 255 is the actual stat ceiling, but 200 is the ceiling for the vast majority of pokemon
-        let hp_color = self.color(Colors::rate(*hp, 200));
-        let at_color = self.color(Colors::rate(*attack, 200));
-        let df_color = self.color(Colors::rate(*defense, 200));
-        let sat_color = self.color(Colors::rate(*special_attack, 200));
-        let sdf_color = self.color(Colors::rate(*special_defense, 200));
-        let spd_color = self.color(Colors::rate(*speed, 200));
-        // 720 is based on Arceus' total stats
-        let total_color = self.color_effect(Colors::rate(total, 720), Effects::Bold);
-
-        writedoc! {
-            f,
-            "hp    atk   def   satk  sdef  spd   total
-            {hp_color}{hp:<6}{at_color}{attack:<6}{df_color}{defense:<6}{sat_color}{special_attack:<6}\
-            {sdf_color}{special_defense:<6}{spd_color}{speed:<6}{total_color}{total:<6}{total_color:#}",
-        }
-    }
-}
-
-impl<'a> StatsDisplay<'a> {
-    pub fn new(stats: &'a Stats, color_enabled: bool) -> Self {
+impl Style {
+    pub fn new(color_enabled: bool) -> Self {
         Self {
-            stats,
+            style: anstyle::Style::new(),
             color_enabled,
         }
     }
-}
 
-pub struct TypeChartDisplay<'a> {
-    type_chart: &'a TypeChart,
-    label: String,
-    color_enabled: bool,
-}
-
-impl DisplayComponent for TypeChartDisplay<'_> {
-    fn color_enabled(&self) -> bool {
-        self.color_enabled
-    }
-}
-
-impl fmt::Display for TypeChartDisplay<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let weakness_groups = self.group_by_weakness(self.type_chart.get_value(), |item| {
-            Some((item.0.clone(), *item.1))
-        });
-        let type_chart = self.format_groups(weakness_groups);
-
-        writedoc! {
-            f,
-            "{header}{label}{header:#}{type_chart}",
-            header = self.color_effect(Colors::Header, Effects::Bold),
-            label = self.label,
+    pub fn fg(mut self, color: Colors) -> Self {
+        if self.color_enabled {
+            self.style = self.style.fg_color(color.get());
         }
+        self
     }
-}
 
-impl WeaknessDisplay<String> for TypeChartDisplay<'_> {
-    fn format_group(&self, label: &'static str, mut types: Vec<String>, color: Colors) -> String {
-        types.sort();
-        let style = self.color(color);
-        format!("\n{label}: {style}{}{style:#}", types.join(" "))
-    }
-}
-
-impl<'a> TypeChartDisplay<'a> {
-    pub fn new(type_chart: &'a TypeChart, label: String, color_enabled: bool) -> Self {
-        Self {
-            type_chart,
-            label,
-            color_enabled,
+    #[allow(dead_code)]
+    pub fn bg(mut self, color: Colors) -> Self {
+        if self.color_enabled {
+            self.style = self.style.bg_color(color.get());
         }
+        self
+    }
+
+    pub fn effect(mut self, effect: Effects) -> Self {
+        if self.color_enabled {
+            self.style = self.style.effects(effect.get());
+        }
+        self
+    }
+
+    pub fn ansi(&self) -> anstyle::Style {
+        self.style
     }
 }
 
@@ -283,8 +245,8 @@ impl DisplayComponent for MatchDisplay<'_, '_> {
 
 impl fmt::Display for MatchDisplay<'_, '_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let defender_stats = StatsDisplay::new(&self.defender.data.stats, self.color_enabled);
-        let attacker_stats = StatsDisplay::new(&self.attacker.data.stats, self.color_enabled);
+        let defender_stats = DisplayComponent2::new(&self.defender.data.stats, self.color_enabled);
+        let attacker_stats = DisplayComponent2::new(&self.attacker.data.stats, self.color_enabled);
 
         let defender_moves_header = format!(
             "{}'s moves vs {}",
