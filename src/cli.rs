@@ -11,7 +11,6 @@ use crate::api::resource::{
 };
 use crate::api::ApiWrapper;
 use crate::pokemon::{Ability, Move, Pokemon, PokemonData, Type};
-use display::typechart::TypeChartContext;
 use display::*;
 
 const VERSION: &str = env!("DUNSPARS_VERSION");
@@ -233,11 +232,11 @@ impl Program {
 
         let defense_chart = pokemon.get_defense_chart().await?;
         let defense_chart_ctx = TypeChartContext {
-            type_chart: defense_chart,
-            label: "defenses".to_string(),
+            type_chart: &defense_chart,
+            label: "defenses",
         };
         let type_chart_display =
-            DisplayComponent2::new(&defense_chart_ctx, self.config.color_enabled);
+            DisplayComponent2::new(defense_chart_ctx, self.config.color_enabled);
 
         let mut output = formatdoc! {
             "
@@ -287,18 +286,18 @@ impl Program {
         } = Type::from_name(&self.api, &type_name, self.config.generation).await?;
 
         let offense_chart_ctx = TypeChartContext {
-            type_chart: offense_chart,
-            label: format!("{type_name} offense"),
+            type_chart: &offense_chart,
+            label: &format!("{type_name} offense"),
         };
         let offense_chart_display =
-            DisplayComponent2::new(&offense_chart_ctx, self.config.color_enabled);
+            DisplayComponent2::new(offense_chart_ctx, self.config.color_enabled);
 
         let defense_chart_ctx = TypeChartContext {
-            type_chart: defense_chart,
-            label: format!("{type_name} defense"),
+            type_chart: &defense_chart,
+            label: &format!("{type_name} defense"),
         };
         let defense_chart_display =
-            DisplayComponent2::new(&defense_chart_ctx, self.config.color_enabled);
+            DisplayComponent2::new(defense_chart_ctx, self.config.color_enabled);
 
         let output = formatdoc! {
             "
@@ -342,13 +341,14 @@ impl Program {
 
         let mut output = String::from("");
         for defender in defenders {
-            let match_display = MatchDisplay::new(
-                &defender,
-                &attacker,
+            let match_context = MatchContext {
+                defender: &defender,
+                attacker: &attacker,
                 verbose,
                 stab_only,
-                self.config.color_enabled,
-            );
+            };
+            let match_display = DisplayComponent2::new(match_context, self.config.color_enabled);
+
             output += formatdoc! {
                 "
                 {match_display}

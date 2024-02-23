@@ -5,12 +5,12 @@ use std::fmt;
 
 use indoc::writedoc;
 
-pub struct TypeChartContext {
-    pub type_chart: TypeChart,
-    pub label: String,
+pub struct TypeChartContext<'a> {
+    pub type_chart: &'a TypeChart,
+    pub label: &'a str,
 }
 
-impl fmt::Display for DisplayComponent2<&TypeChartContext> {
+impl fmt::Display for DisplayComponent2<TypeChartContext<'_>> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let TypeChartContext { type_chart, label } = self.context;
 
@@ -27,7 +27,7 @@ impl fmt::Display for DisplayComponent2<&TypeChartContext> {
     }
 }
 
-impl WeaknessDisplay<String> for DisplayComponent2<&TypeChartContext> {
+impl WeaknessDisplay<String> for DisplayComponent2<TypeChartContext<'_>> {
     fn format_group(&self, label: &'static str, mut types: Vec<String>, color: Colors) -> String {
         types.sort();
         let style = self.ansi(color);

@@ -1,15 +1,19 @@
+mod match_;
+mod move_weakness;
 mod pokemon_data;
 mod stats;
-pub mod typechart;
+mod typechart;
+
+pub use match_::MatchContext;
+pub use move_weakness::MoveWeaknessContext;
+pub use typechart::TypeChartContext;
 
 use std::fmt;
 
 use indoc::writedoc;
 
 use crate::cli::utils::{DisplayComponent, WeaknessDisplay};
-use crate::pokemon::{
-    self, Ability, EvolutionMethod, EvolutionStep, Move, MoveList, Pokemon, PokemonData,
-};
+use crate::pokemon::{self, Ability, EvolutionMethod, EvolutionStep, Move, MoveList, PokemonData};
 
 pub struct DisplayComponent2<T> {
     context: T,
@@ -134,180 +138,6 @@ impl Style {
 
     pub fn ansi(&self) -> anstyle::Style {
         self.style
-    }
-}
-
-pub struct MoveWeaknessDisplay<'a, 'b> {
-    defender: &'a Pokemon<'b>,
-    attacker: &'a Pokemon<'b>,
-    verbose: bool,
-    stab_only: bool,
-    color_enabled: bool,
-}
-
-impl DisplayComponent for MoveWeaknessDisplay<'_, '_> {
-    fn color_enabled(&self) -> bool {
-        self.color_enabled
-    }
-}
-
-impl<'a, 'b> WeaknessDisplay<&'a Move<'b>> for MoveWeaknessDisplay<'a, 'b> {
-    fn format_group(
-        &self,
-        label: &'static str,
-        mut moves: Vec<&'a Move<'b>>,
-        color: Colors,
-    ) -> String {
-        let mut output = format!("\n{label}: ");
-
-        let style = self.style().fg(color);
-        let normal_color = style.ansi();
-        let stab_color = style.effect(Effects::Underline).ansi();
-
-        moves.sort_by_key(|m| m.name.clone());
-        for move_ in moves {
-            let damage_class = match move_.damage_class.as_str() {
-                "special" => "s",
-                "physical" => "p",
-                _ => "?",
-            };
-            let color = if pokemon::is_stab(&move_.type_, &self.attacker.data) {
-                stab_color
-            } else {
-                normal_color
-            };
-
-            output += &format!(
-                "{color}{move_name}({damage_class}){color:#} ",
-                move_name = move_.name,
-            );
-        }
-
-        output
-    }
-}
-
-impl fmt::Display for MoveWeaknessDisplay<'_, '_> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let weakness_groups = self.group_by_weakness(self.attacker.move_list.get_map(), |move_| {
-            let multiplier = self.defender.defense_chart.get_multiplier(&move_.1.type_);
-
-            let stab_qualified =
-                !self.stab_only || pokemon::is_stab(&move_.1.type_, &self.attacker.data);
-            let verbose_qualified = self.verbose || multiplier >= 2.0;
-
-            if move_.1.damage_class != "status" && stab_qualified && verbose_qualified {
-                Some((move_.1, multiplier))
-            } else {
-                None
-            }
-        });
-        let defender_weaknesses = self.format_groups(weakness_groups);
-
-        writedoc! {
-            f,
-            "{defender_weaknesses}",
-        }
-    }
-}
-
-impl<'a, 'b> MoveWeaknessDisplay<'a, 'b> {
-    pub fn new(
-        defender: &'a Pokemon<'b>,
-        attacker: &'a Pokemon<'b>,
-        verbose: bool,
-        stab_only: bool,
-        color_enabled: bool,
-    ) -> Self {
-        Self {
-            defender,
-            attacker,
-            verbose,
-            stab_only,
-            color_enabled,
-        }
-    }
-}
-
-pub struct MatchDisplay<'a, 'b> {
-    defender: &'a Pokemon<'b>,
-    attacker: &'a Pokemon<'b>,
-    verbose: bool,
-    stab_only: bool,
-    color_enabled: bool,
-}
-
-impl DisplayComponent for MatchDisplay<'_, '_> {
-    fn color_enabled(&self) -> bool {
-        self.color_enabled
-    }
-}
-
-impl fmt::Display for MatchDisplay<'_, '_> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let defender_stats = DisplayComponent2::new(&self.defender.data.stats, self.color_enabled);
-        let attacker_stats = DisplayComponent2::new(&self.attacker.data.stats, self.color_enabled);
-
-        let defender_moves_header = format!(
-            "{}'s moves vs {}",
-            self.attacker.data.name, self.defender.data.name
-        );
-        let defender_weaknesses = MoveWeaknessDisplay::new(
-            self.defender,
-            self.attacker,
-            self.verbose,
-            self.stab_only,
-            self.color_enabled,
-        );
-
-        let attacker_moves_header = format!(
-            "{}'s moves vs {}",
-            self.defender.data.name, self.attacker.data.name
-        );
-        let attacker_weaknesses = MoveWeaknessDisplay::new(
-            self.attacker,
-            self.defender,
-            self.verbose,
-            self.stab_only,
-            self.color_enabled,
-        );
-
-        writedoc! {
-            f,
-            "{header}{defender_header}{header:#} {defender_primary_type} {defender_secondary_type}
-            {defender_stats}
-            {header}{attacker_header}{header:#} {attacker_primary_type} {attacker_secondary_type}
-            {attacker_stats}
-
-            {header}{defender_moves_header}{header:#}{defender_weaknesses}
-
-            {header}{attacker_moves_header}{header:#}{attacker_weaknesses}",
-            defender_header = &self.defender.data.name,
-            defender_primary_type = self.defender.data.primary_type,
-            defender_secondary_type = self.defender.data.secondary_type.as_deref().unwrap_or(""),
-            attacker_header = &self.attacker.data.name,
-            attacker_primary_type = self.attacker.data.primary_type,
-            attacker_secondary_type = self.attacker.data.secondary_type.as_deref().unwrap_or(""),
-            header = self.color_effect(Colors::Header, Effects::Bold),
-        }
-    }
-}
-
-impl<'a, 'b> MatchDisplay<'a, 'b> {
-    pub fn new(
-        defender: &'a Pokemon<'b>,
-        attacker: &'a Pokemon<'b>,
-        verbose: bool,
-        stab_only: bool,
-        color_enabled: bool,
-    ) -> Self {
-        MatchDisplay {
-            defender,
-            attacker,
-            verbose,
-            stab_only,
-            color_enabled,
-        }
     }
 }
 
