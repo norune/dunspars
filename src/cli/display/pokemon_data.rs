@@ -1,11 +1,11 @@
-use super::{Colors, DisplayComponent2};
+use super::{Colors, DisplayComponent};
 use crate::pokemon::{PokemonData, PokemonGroup};
 
 use std::fmt;
 
 use indoc::writedoc;
 
-impl fmt::Display for DisplayComponent2<&PokemonData<'_>> {
+impl fmt::Display for DisplayComponent<&PokemonData<'_>> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let PokemonData {
             name,
@@ -30,7 +30,7 @@ impl fmt::Display for DisplayComponent2<&PokemonData<'_>> {
             PokemonGroup::Regular => "",
         };
 
-        let stats_display = DisplayComponent2::new(stats, self.color_enabled);
+        let stats_display = DisplayComponent::new(stats, self.color_enabled);
         let abilities = abilities
             .iter()
             .map(|a| {

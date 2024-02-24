@@ -1,20 +1,20 @@
-use super::{Colors, DisplayComponent2, Effects, WeaknessDisplay};
+use super::{Colors, DisplayComponent, Effects, WeaknessDisplay};
 use crate::pokemon::{self, Move, Pokemon};
 
 use std::fmt;
 
 use indoc::writedoc;
 
-pub struct MoveWeaknessContext<'a, 'b> {
+pub struct MoveWeaknessComponent<'a, 'b> {
     pub defender: &'a Pokemon<'b>,
     pub attacker: &'a Pokemon<'b>,
     pub verbose: bool,
     pub stab_only: bool,
 }
 
-impl fmt::Display for DisplayComponent2<MoveWeaknessContext<'_, '_>> {
+impl fmt::Display for DisplayComponent<MoveWeaknessComponent<'_, '_>> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let MoveWeaknessContext {
+        let MoveWeaknessComponent {
             defender,
             attacker,
             verbose,
@@ -42,7 +42,7 @@ impl fmt::Display for DisplayComponent2<MoveWeaknessContext<'_, '_>> {
     }
 }
 
-impl<'a, 'b> WeaknessDisplay<&'a Move<'b>> for DisplayComponent2<MoveWeaknessContext<'_, '_>> {
+impl<'a, 'b> WeaknessDisplay<&'a Move<'b>> for DisplayComponent<MoveWeaknessComponent<'_, '_>> {
     fn format_group(
         &self,
         label: &'static str,

@@ -1,11 +1,11 @@
-use super::{Colors, DisplayComponent2};
+use super::{Colors, DisplayComponent};
 use crate::pokemon::Stats;
 
 use std::fmt;
 
 use indoc::writedoc;
 
-impl fmt::Display for DisplayComponent2<&Stats> {
+impl fmt::Display for DisplayComponent<&Stats> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let Stats {
             hp,

@@ -228,15 +228,15 @@ impl Program {
         let pokemon_name = resource.validate(&name)?;
 
         let pokemon = PokemonData::from_name(&self.api, &pokemon_name, &self.config.game).await?;
-        let pokemon_display = DisplayComponent2::new(&pokemon, self.config.color_enabled);
+        let pokemon_display = DisplayComponent::new(&pokemon, self.config.color_enabled);
 
         let defense_chart = pokemon.get_defense_chart().await?;
-        let defense_chart_ctx = TypeChartContext {
+        let defense_chart_ctx = TypeChartComponent {
             type_chart: &defense_chart,
             label: "defenses",
         };
         let type_chart_display =
-            DisplayComponent2::new(defense_chart_ctx, self.config.color_enabled);
+            DisplayComponent::new(defense_chart_ctx, self.config.color_enabled);
 
         let mut output = formatdoc! {
             "
@@ -249,7 +249,7 @@ impl Program {
         if evolution {
             let evolution_step = pokemon.get_evolution_steps().await?;
             let evolution_step_display =
-                EvolutionStepDisplay::new(&evolution_step, self.config.color_enabled);
+                DisplayComponent::new(&evolution_step, self.config.color_enabled);
             output += formatdoc! {
                 "
 
@@ -261,8 +261,13 @@ impl Program {
 
         if moves {
             let moves = pokemon.get_moves().await?;
+            let move_list_context = MoveListComponent {
+                move_list: &moves,
+                pokemon: &pokemon,
+            };
             let move_list_display =
-                MoveListDisplay::new(&moves, &pokemon, self.config.color_enabled);
+                DisplayComponent::new(move_list_context, self.config.color_enabled);
+
             output += formatdoc! {
                 "
 
@@ -285,19 +290,19 @@ impl Program {
             ..
         } = Type::from_name(&self.api, &type_name, self.config.generation).await?;
 
-        let offense_chart_ctx = TypeChartContext {
+        let offense_chart_ctx = TypeChartComponent {
             type_chart: &offense_chart,
             label: &format!("{type_name} offense"),
         };
         let offense_chart_display =
-            DisplayComponent2::new(offense_chart_ctx, self.config.color_enabled);
+            DisplayComponent::new(offense_chart_ctx, self.config.color_enabled);
 
-        let defense_chart_ctx = TypeChartContext {
+        let defense_chart_ctx = TypeChartComponent {
             type_chart: &defense_chart,
             label: &format!("{type_name} defense"),
         };
         let defense_chart_display =
-            DisplayComponent2::new(defense_chart_ctx, self.config.color_enabled);
+            DisplayComponent::new(defense_chart_ctx, self.config.color_enabled);
 
         let output = formatdoc! {
             "
@@ -341,13 +346,13 @@ impl Program {
 
         let mut output = String::from("");
         for defender in defenders {
-            let match_context = MatchContext {
+            let match_context = MatchComponent {
                 defender: &defender,
                 attacker: &attacker,
                 verbose,
                 stab_only,
             };
-            let match_display = DisplayComponent2::new(match_context, self.config.color_enabled);
+            let match_display = DisplayComponent::new(match_context, self.config.color_enabled);
 
             output += formatdoc! {
                 "
@@ -372,8 +377,14 @@ impl Program {
             pokemon.push(data);
         }
 
-        let output = String::from("");
-        Ok(output)
+        let coverage_ctx = CoverageComponent { pokemon: &pokemon };
+        let coverage_display = DisplayComponent::new(coverage_ctx, self.config.color_enabled);
+
+        Ok(formatdoc! {
+            "
+            {coverage_display}
+            "
+        })
     }
 
     async fn run_move(&self, name: String) -> Result<String> {
@@ -381,7 +392,7 @@ impl Program {
         let move_name = resource.validate(&name)?;
 
         let move_ = Move::from_name(&self.api, &move_name, self.config.generation).await?;
-        let move_display = MoveDisplay::new(&move_, self.config.color_enabled);
+        let move_display = DisplayComponent::new(&move_, self.config.color_enabled);
 
         let output = formatdoc! {
             "
@@ -397,7 +408,7 @@ impl Program {
         let ability_name = resource.validate(&name)?;
 
         let ability = Ability::from_name(&self.api, &ability_name, self.config.generation).await?;
-        let ability_display = AbilityDisplay::new(&ability, self.config.color_enabled);
+        let ability_display = DisplayComponent::new(&ability, self.config.color_enabled);
 
         let output = formatdoc! {
             "
