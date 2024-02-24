@@ -374,10 +374,14 @@ impl Program {
         for name in names {
             let name = resource.validate(&name)?;
             let data = PokemonData::from_name(&self.api, &name, &self.config.game).await?;
-            pokemon.push(data);
+            let moves = data.get_moves().await?;
+            let chart = data.get_defense_chart().await?;
+
+            let mon = Pokemon::new(data, chart, moves);
+            pokemon.push(mon);
         }
 
-        let coverage_ctx = CoverageComponent { pokemon: &pokemon };
+        let coverage_ctx = CoverageComponent::try_new(&pokemon).await?;
         let coverage_display = DisplayComponent::new(coverage_ctx, self.config.color_enabled);
 
         Ok(formatdoc! {

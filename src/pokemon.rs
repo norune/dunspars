@@ -110,6 +110,11 @@ pub struct Stats {
     pub speed: i64,
 }
 
+pub const TYPES: [&str; 19] = [
+    "normal", "fighting", "fire", "fighting", "water", "flying", "grass", "poison", "electric",
+    "ground", "psychic", "rock", "ice", "bug", "dragon", "ghost", "dark", "steel", "fairy",
+];
+
 #[derive(Debug)]
 pub struct TypeChart {
     value: HashMap<String, f32>,
@@ -118,13 +123,8 @@ pub struct TypeChart {
 impl Default for TypeChart {
     fn default() -> TypeChart {
         let mut chart = HashMap::new();
-        let types = vec![
-            "normal", "fighting", "fire", "fighting", "water", "flying", "grass", "poison",
-            "electric", "ground", "psychic", "rock", "ice", "bug", "dragon", "ghost", "dark",
-            "steel", "fairy",
-        ];
 
-        for type_ in types {
+        for type_ in TYPES {
             chart.insert(type_.to_string(), 1.0f32);
         }
 
