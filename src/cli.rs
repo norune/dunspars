@@ -640,4 +640,26 @@ mod tests {
             insta::assert_snapshot!(verbose);
         });
     }
+
+    #[tokio::test]
+    async fn run_coverage() {
+        let program = setup_program("the-indigo-disk").await;
+        let team = vec![
+            String::from("flamigo"),
+            String::from("cramorant"),
+            String::from("ribombee"),
+            String::from("ogerpon-cornerstone-mask"),
+            String::from("dudunsparce"),
+            String::from("sinistcha"),
+        ];
+
+        let output = program.run_coverage(team).await.unwrap();
+
+        insta::with_settings!({
+            description => "coverage flamigo cramorant ribombee ogerpon-cornerstone-mask dudunsparce sinistcha --game the-indigo-disk",
+            omit_expression => true
+        }, {
+            insta::assert_snapshot!(output);
+        });
+    }
 }

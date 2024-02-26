@@ -1,0 +1,43 @@
+---
+source: src/cli.rs
+description: coverage flamigo cramorant ribombee ogerpon-cornerstone-mask dudunsparce sinistcha --game the-indigo-disk
+---
+offense coverage
+bug: cramorant (flying) flamigo (flying) ogerpon-cornerstone-mask (rock)
+dark: flamigo (fighting) ribombee (bug) ribombee (fairy)
+dragon: ribombee (fairy)
+electric
+fairy
+fighting: cramorant (flying) flamigo (flying) ribombee (fairy)
+fire: cramorant (water) ogerpon-cornerstone-mask (rock)
+flying: ogerpon-cornerstone-mask (rock)
+ghost: sinistcha (ghost)
+grass: cramorant (flying) flamigo (flying) ribombee (bug)
+ground: cramorant (water) ogerpon-cornerstone-mask (grass) sinistcha (grass)
+ice: flamigo (fighting) ogerpon-cornerstone-mask (rock)
+normal: flamigo (fighting)
+poison
+psychic: ribombee (bug) sinistcha (ghost)
+rock: cramorant (water) flamigo (fighting) ogerpon-cornerstone-mask (grass) sinistcha (grass)
+steel: flamigo (fighting)
+water: ogerpon-cornerstone-mask (grass) sinistcha (grass)
+
+defense coverage
+bug: cramorant (0.5) flamigo (0.25) ribombee (0.5)
+dark: flamigo (0.5) ribombee (0.5)
+dragon: ribombee (0)
+electric: ogerpon-cornerstone-mask (0.5) sinistcha (0.5)
+fairy
+fighting: cramorant (0.5) flamigo (0.5) ribombee (0.25) sinistcha (0)
+fire: cramorant (0.5)
+flying
+ghost: dudunsparce (0)
+grass: flamigo (0.5) ribombee (0.5) sinistcha (0.5)
+ground: cramorant (0) flamigo (0) ribombee (0.5) sinistcha (0.5)
+ice
+normal: ogerpon-cornerstone-mask (0.5) sinistcha (0)
+poison
+psychic
+rock
+steel: cramorant (0.5)
+water: cramorant (0.5) sinistcha (0.5)
