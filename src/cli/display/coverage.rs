@@ -1,6 +1,6 @@
 use super::{Colors, DisplayComponent};
-use crate::api::ApiWrapper;
-use crate::pokemon::{Pokemon, PokemonData, Type, TypeChart, TYPES};
+use crate::data::api::ApiWrapper;
+use crate::data::{Pokemon, PokemonData, Type, TypeChart, TypeCharts, TYPES};
 
 use std::collections::{hash_map::Entry, HashMap};
 use std::fmt;
@@ -119,41 +119,15 @@ impl DisplayComponent<CoverageComponent<'_, '_>> {
         {
             let pokemon_name = &data.name;
 
-            let Type {
-                name: type_name,
-                offense_chart,
-                ..
-            } = resource.get(&data.primary_type).unwrap();
-            self.add_pokemon_to_coverage(
-                pokemon_name,
-                offense_chart,
-                &mut offense_coverage,
-                true,
-                type_name,
-            );
+            let Type { offense_chart, .. } = resource.get(&data.primary_type).unwrap();
+            self.add_pokemon_to_coverage(pokemon_name, offense_chart, &mut offense_coverage);
 
             if let Some(secondary_type) = data.secondary_type.as_ref() {
-                let Type {
-                    name: type_name,
-                    offense_chart,
-                    ..
-                } = resource.get(secondary_type).unwrap();
-                self.add_pokemon_to_coverage(
-                    pokemon_name,
-                    offense_chart,
-                    &mut offense_coverage,
-                    true,
-                    type_name,
-                );
+                let Type { offense_chart, .. } = resource.get(secondary_type).unwrap();
+                self.add_pokemon_to_coverage(pokemon_name, offense_chart, &mut offense_coverage);
             }
 
-            self.add_pokemon_to_coverage(
-                pokemon_name,
-                defense_chart,
-                &mut defense_coverage,
-                false,
-                "",
-            );
+            self.add_pokemon_to_coverage(pokemon_name, defense_chart, &mut defense_coverage);
         }
 
         (offense_coverage, defense_coverage)
@@ -162,22 +136,19 @@ impl DisplayComponent<CoverageComponent<'_, '_>> {
     fn add_pokemon_to_coverage(
         &self,
         pokemon_name: &str,
-        type_chart: &TypeChart,
+        type_chart: &impl TypeChart,
         coverage: &mut HashMap<String, Vec<String>>,
-        attack: bool,
-        tag: &str,
     ) {
-        for (type_, multiplier) in type_chart.get_value() {
-            if (attack && *multiplier > 1.0) || (!attack && *multiplier < 1.0) {
+        for (type_, multiplier) in type_chart.get_chart() {
+            let (covered, tag) = match type_chart.get_type() {
+                TypeCharts::Offense => (*multiplier > 1.0, type_chart.get_label()),
+                TypeCharts::Defense => (*multiplier < 1.0, multiplier.to_string()),
+            };
+
+            if covered {
                 let entry = coverage.entry(type_.clone());
 
                 if let Entry::Occupied(mut entry) = entry {
-                    let tag = if tag.is_empty() {
-                        multiplier.to_string()
-                    } else {
-                        String::from(tag)
-                    };
-
                     let pokemon = format!(
                         "{green}{pokemon_name}{green:#} ({tag})",
                         green = self.ansi(Colors::Cyan)

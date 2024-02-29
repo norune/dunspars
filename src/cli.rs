@@ -5,12 +5,12 @@ use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
 use indoc::{formatdoc, printdoc};
 
-use crate::api::resource::{
+use crate::data::api::resource::{
     AbilityResource, GameResource, GetGeneration, MoveResource, PokemonResource, Resource,
     TypeResource,
 };
-use crate::api::ApiWrapper;
-use crate::pokemon::{Ability, Move, Pokemon, PokemonData, Type};
+use crate::data::api::ApiWrapper;
+use crate::data::{Ability, Move, Pokemon, PokemonData, Type};
 use display::*;
 
 const VERSION: &str = env!("DUNSPARS_VERSION");
@@ -233,7 +233,6 @@ impl Program {
         let defense_chart = pokemon.get_defense_chart().await?;
         let defense_chart_ctx = TypeChartComponent {
             type_chart: &defense_chart,
-            label: "defenses",
         };
         let type_chart_display =
             DisplayComponent::new(defense_chart_ctx, self.config.color_enabled);
@@ -292,14 +291,12 @@ impl Program {
 
         let offense_chart_ctx = TypeChartComponent {
             type_chart: &offense_chart,
-            label: &format!("{type_name} offense"),
         };
         let offense_chart_display =
             DisplayComponent::new(offense_chart_ctx, self.config.color_enabled);
 
         let defense_chart_ctx = TypeChartComponent {
             type_chart: &defense_chart,
-            label: &format!("{type_name} defense"),
         };
         let defense_chart_display =
             DisplayComponent::new(defense_chart_ctx, self.config.color_enabled);

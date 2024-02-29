@@ -26,8 +26,9 @@ use rustemon::model::pokemon::{
 };
 use rustemon::model::resource::VerboseEffect as RustemonVerboseEffect;
 
-use crate::pokemon::{
-    Ability, EvolutionStep, Move, PokemonData, PokemonGroup, Stats, Type, TypeChart,
+use crate::data::{
+    Ability, DefenseTypeChart, EvolutionStep, Move, OffenseTypeChart, PokemonData, PokemonGroup,
+    Stats, Type, TypeChart,
 };
 use resource::{GameResource, GetGeneration, Resource};
 
@@ -200,33 +201,15 @@ impl ApiWrapper {
         )
         .unwrap_or(damage_relations);
 
-        let mut offense_chart = HashMap::new();
-        let mut defense_chart = HashMap::new();
-
-        relations.no_damage_to.iter().for_each(|t| {
-            offense_chart.insert(t.name.to_string(), 0.0);
-        });
-        relations.half_damage_to.iter().for_each(|t| {
-            offense_chart.insert(t.name.to_string(), 0.5);
-        });
-        relations.double_damage_to.iter().for_each(|t| {
-            offense_chart.insert(t.name.to_string(), 2.0);
-        });
-
-        relations.no_damage_from.iter().for_each(|t| {
-            defense_chart.insert(t.name.to_string(), 0.0);
-        });
-        relations.half_damage_from.iter().for_each(|t| {
-            defense_chart.insert(t.name.to_string(), 0.5);
-        });
-        relations.double_damage_from.iter().for_each(|t| {
-            defense_chart.insert(t.name.to_string(), 2.0);
-        });
+        let mut offense_chart = OffenseTypeChart::from(&relations);
+        offense_chart.set_label(type_str);
+        let mut defense_chart = DefenseTypeChart::from(&relations);
+        defense_chart.set_label(type_str);
 
         Ok(Type {
             name,
-            offense_chart: TypeChart::new(offense_chart),
-            defense_chart: TypeChart::new(defense_chart),
+            offense_chart,
+            defense_chart,
             generation: current_generation,
             api: self,
         })

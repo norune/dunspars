@@ -1,19 +1,26 @@
+pub mod api;
+
 use std::collections::HashMap;
+use std::ops::Add;
 
 use anyhow::Result;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 
-use crate::api::ApiWrapper;
+use api::ApiWrapper;
 
 pub struct Pokemon<'a> {
     pub data: PokemonData<'a>,
-    pub defense_chart: TypeChart,
+    pub defense_chart: DefenseTypeChart,
     pub move_list: MoveList<'a>,
 }
 
 impl<'a> Pokemon<'a> {
-    pub fn new(data: PokemonData<'a>, defense_chart: TypeChart, move_list: MoveList<'a>) -> Self {
+    pub fn new(
+        data: PokemonData<'a>,
+        defense_chart: DefenseTypeChart,
+        move_list: MoveList<'a>,
+    ) -> Self {
         Self {
             data,
             defense_chart,
@@ -59,15 +66,13 @@ impl<'a> PokemonData<'a> {
         Ok(MoveList::new(moves))
     }
 
-    pub async fn get_defense_chart(&self) -> Result<TypeChart> {
+    pub async fn get_defense_chart(&self) -> Result<DefenseTypeChart> {
         let primary_type = Type::from_name(self.api, &self.primary_type, self.generation).await?;
 
         if let Some(secondary_type) = &self.secondary_type {
             let secondary_type = Type::from_name(self.api, secondary_type, self.generation).await?;
 
-            Ok(primary_type
-                .defense_chart
-                .combine(&secondary_type.defense_chart))
+            Ok(primary_type.defense_chart + secondary_type.defense_chart)
         } else {
             Ok(primary_type.defense_chart)
         }
@@ -85,21 +90,6 @@ pub enum PokemonGroup {
     Regular,
 }
 
-#[derive(Debug)]
-pub struct Type<'a> {
-    pub name: String,
-    pub offense_chart: TypeChart,
-    pub defense_chart: TypeChart,
-    pub generation: u8,
-    pub api: &'a ApiWrapper,
-}
-
-impl<'a> Type<'a> {
-    pub async fn from_name(api: &'a ApiWrapper, name: &str, generation: u8) -> Result<Self> {
-        api.get_type(name, generation).await
-    }
-}
-
 #[derive(Default, Debug)]
 pub struct Stats {
     pub hp: i64,
@@ -110,58 +100,147 @@ pub struct Stats {
     pub speed: i64,
 }
 
+#[derive(Debug)]
+pub struct Type<'a> {
+    pub name: String,
+    pub offense_chart: OffenseTypeChart,
+    pub defense_chart: DefenseTypeChart,
+    pub generation: u8,
+    pub api: &'a ApiWrapper,
+}
+
+impl<'a> Type<'a> {
+    pub async fn from_name(api: &'a ApiWrapper, name: &str, generation: u8) -> Result<Self> {
+        api.get_type(name, generation).await
+    }
+}
+
 pub const TYPES: [&str; 19] = [
     "normal", "fighting", "fire", "fighting", "water", "flying", "grass", "poison", "electric",
     "ground", "psychic", "rock", "ice", "bug", "dragon", "ghost", "dark", "steel", "fairy",
 ];
 
-#[derive(Debug)]
-pub struct TypeChart {
-    value: HashMap<String, f32>,
+fn default_chart() -> HashMap<String, f32> {
+    let mut chart = HashMap::new();
+
+    for type_ in TYPES {
+        chart.insert(type_.to_string(), 1.0f32);
+    }
+
+    chart
 }
 
-impl Default for TypeChart {
-    fn default() -> TypeChart {
-        let mut chart = HashMap::new();
+fn combine(chart1: &HashMap<String, f32>, chart2: &HashMap<String, f32>) -> HashMap<String, f32> {
+    let mut new_chart = HashMap::new();
 
-        for type_ in TYPES {
-            chart.insert(type_.to_string(), 1.0f32);
-        }
-
-        TypeChart { value: chart }
-    }
-}
-
-impl TypeChart {
-    pub fn new(hashmap: HashMap<String, f32>) -> TypeChart {
-        let chart = TypeChart::default();
-        chart.combine(&TypeChart { value: hashmap })
+    for (type_, multiplier) in chart1 {
+        new_chart.insert(type_.clone(), *multiplier);
     }
 
-    pub fn get_value(&self) -> &HashMap<String, f32> {
-        &self.value
-    }
-
-    pub fn get_multiplier(&self, type_: &str) -> f32 {
-        *self.value.get(type_).unwrap()
-    }
-
-    fn combine(&self, chart: &TypeChart) -> TypeChart {
-        let mut new_chart = HashMap::new();
-
-        for (type_, multiplier) in &self.value {
+    for (type_, multiplier) in chart2 {
+        if let Some(new_multiplier) = new_chart.get(type_) {
+            new_chart.insert(type_.clone(), multiplier * new_multiplier);
+        } else {
             new_chart.insert(type_.clone(), *multiplier);
         }
+    }
 
-        for (type_, multiplier) in &chart.value {
-            if let Some(new_multiplier) = new_chart.get(type_) {
-                new_chart.insert(type_.clone(), multiplier * new_multiplier);
-            } else {
-                new_chart.insert(type_.clone(), *multiplier);
-            }
+    new_chart
+}
+
+pub trait TypeChart {
+    fn get_multiplier(&self, type_: &str) -> f32 {
+        *self.get_chart().get(type_).unwrap()
+    }
+
+    fn get_chart(&self) -> &HashMap<String, f32>;
+    fn get_type(&self) -> TypeCharts;
+    fn get_label(&self) -> String;
+    fn set_label(&mut self, label: &str);
+}
+
+pub enum TypeCharts {
+    Offense,
+    Defense,
+}
+
+trait NewTypeChart: Sized {
+    fn new(chart: HashMap<String, f32>) -> Self {
+        let default = default_chart();
+        let new_chart = combine(&default, &chart);
+        Self::new_struct(new_chart)
+    }
+
+    fn new_struct(chart: HashMap<String, f32>) -> Self;
+}
+
+#[derive(Debug)]
+pub struct OffenseTypeChart {
+    chart: HashMap<String, f32>,
+    label: String,
+}
+impl NewTypeChart for OffenseTypeChart {
+    fn new_struct(chart: HashMap<String, f32>) -> Self {
+        Self {
+            chart,
+            label: String::from(""),
         }
+    }
+}
+impl TypeChart for OffenseTypeChart {
+    fn get_chart(&self) -> &HashMap<String, f32> {
+        &self.chart
+    }
 
-        TypeChart { value: new_chart }
+    fn get_type(&self) -> TypeCharts {
+        TypeCharts::Offense
+    }
+
+    fn get_label(&self) -> String {
+        self.label.clone()
+    }
+
+    fn set_label(&mut self, label: &str) {
+        self.label = String::from(label);
+    }
+}
+
+#[derive(Debug)]
+pub struct DefenseTypeChart {
+    chart: HashMap<String, f32>,
+    label: String,
+}
+impl NewTypeChart for DefenseTypeChart {
+    fn new_struct(chart: HashMap<String, f32>) -> Self {
+        Self {
+            chart,
+            label: String::from(""),
+        }
+    }
+}
+impl TypeChart for DefenseTypeChart {
+    fn get_chart(&self) -> &HashMap<String, f32> {
+        &self.chart
+    }
+
+    fn get_type(&self) -> TypeCharts {
+        TypeCharts::Defense
+    }
+
+    fn get_label(&self) -> String {
+        self.label.clone()
+    }
+
+    fn set_label(&mut self, label: &str) {
+        self.label = String::from(label);
+    }
+}
+impl Add for DefenseTypeChart {
+    type Output = DefenseTypeChart;
+    fn add(self, rhs: Self) -> Self::Output {
+        let chart = combine(self.get_chart(), rhs.get_chart());
+        let label = self.label + " " + &rhs.label;
+        Self { chart, label }
     }
 }
 

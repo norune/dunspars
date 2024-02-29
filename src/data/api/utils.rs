@@ -19,7 +19,11 @@ use rustemon::model::pokemon::{
 use rustemon::model::resource::Effect as RustemonEffect;
 
 use super::resource::GetGeneration;
-use crate::pokemon::{EvolutionMethod, EvolutionStep, Stats};
+use crate::data::{
+    DefenseTypeChart, EvolutionMethod, EvolutionStep, NewTypeChart, OffenseTypeChart, Stats,
+};
+
+use std::collections::HashMap;
 
 pub trait Past<T> {
     fn generation(&self, resource: &impl GetGeneration) -> u8;
@@ -226,6 +230,42 @@ impl From<Vec<RustemonStat>> for Stats {
         }
 
         stats
+    }
+}
+
+impl From<&RustemonTypeRelations> for OffenseTypeChart {
+    fn from(relations: &RustemonTypeRelations) -> Self {
+        let mut offense_chart = HashMap::new();
+
+        relations.no_damage_to.iter().for_each(|t| {
+            offense_chart.insert(t.name.to_string(), 0.0);
+        });
+        relations.half_damage_to.iter().for_each(|t| {
+            offense_chart.insert(t.name.to_string(), 0.5);
+        });
+        relations.double_damage_to.iter().for_each(|t| {
+            offense_chart.insert(t.name.to_string(), 2.0);
+        });
+
+        Self::new(offense_chart)
+    }
+}
+
+impl From<&RustemonTypeRelations> for DefenseTypeChart {
+    fn from(relations: &RustemonTypeRelations) -> Self {
+        let mut defense_chart = HashMap::new();
+
+        relations.no_damage_from.iter().for_each(|t| {
+            defense_chart.insert(t.name.to_string(), 0.0);
+        });
+        relations.half_damage_from.iter().for_each(|t| {
+            defense_chart.insert(t.name.to_string(), 0.5);
+        });
+        relations.double_damage_from.iter().for_each(|t| {
+            defense_chart.insert(t.name.to_string(), 2.0);
+        });
+
+        Self::new(defense_chart)
     }
 }
 

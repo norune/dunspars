@@ -9,7 +9,7 @@ use rustemon::client::RustemonClient;
 use rustemon::games::version_group as rustemon_version;
 
 use super::utils;
-use crate::pokemon::Game;
+use crate::data::Game;
 
 pub enum ResourceResult {
     Valid,

@@ -1,5 +1,5 @@
 use super::{Colors, DisplayComponent, MoveWeaknessComponent};
-use crate::pokemon::Pokemon;
+use crate::data::Pokemon;
 
 use std::fmt;
 

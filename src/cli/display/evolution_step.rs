@@ -1,5 +1,5 @@
 use super::{Colors, DisplayComponent};
-use crate::pokemon::{EvolutionMethod, EvolutionStep};
+use crate::data::{EvolutionMethod, EvolutionStep};
 
 use std::fmt;
 

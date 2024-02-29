@@ -1,3 +1,2 @@
-pub mod api;
 pub mod cli;
-pub mod pokemon;
+pub mod data;

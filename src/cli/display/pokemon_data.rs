@@ -1,5 +1,5 @@
 use super::{Colors, DisplayComponent};
-use crate::pokemon::{PokemonData, PokemonGroup};
+use crate::data::{PokemonData, PokemonGroup};
 
 use std::fmt;
 
