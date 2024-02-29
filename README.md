@@ -22,6 +22,13 @@ dunspars match blaziken flygon goodra
 ```
 In this example, it will display match-up information for `Blaziken vs Goodra` and `Flygon vs Goodra`.
 
+### Coverage
+View your type coverage based on the types of the provided Pokémon.
+```
+dunspars coverage flamigo cramorant ribombee
+```
+This will list which of the provided Pokémon will offer offensive and defensive advantage for each type.
+
 ### Type
 View a Pokémon Type's strengths and weaknesses.
 ```

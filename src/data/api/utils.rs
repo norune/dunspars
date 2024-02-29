@@ -299,7 +299,7 @@ mod tests {
     }
 
     #[test]
-    fn match_past_() {
+    fn match_past_test() {
         let mock_resource = MockResource;
         let mock_pasts = vec![
             MockPast { gen: 5, value: 5 },

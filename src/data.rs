@@ -130,7 +130,10 @@ fn default_chart() -> HashMap<String, f32> {
     chart
 }
 
-fn combine(chart1: &HashMap<String, f32>, chart2: &HashMap<String, f32>) -> HashMap<String, f32> {
+fn combine_charts(
+    chart1: &HashMap<String, f32>,
+    chart2: &HashMap<String, f32>,
+) -> HashMap<String, f32> {
     let mut new_chart = HashMap::new();
 
     for (type_, multiplier) in chart1 {
@@ -167,7 +170,7 @@ pub enum TypeCharts {
 trait NewTypeChart: Sized {
     fn new(chart: HashMap<String, f32>) -> Self {
         let default = default_chart();
-        let new_chart = combine(&default, &chart);
+        let new_chart = combine_charts(&default, &chart);
         Self::new_struct(new_chart)
     }
 
@@ -238,7 +241,7 @@ impl TypeChart for DefenseTypeChart {
 impl Add for DefenseTypeChart {
     type Output = DefenseTypeChart;
     fn add(self, rhs: Self) -> Self::Output {
-        let chart = combine(self.get_chart(), rhs.get_chart());
+        let chart = combine_charts(self.get_chart(), rhs.get_chart());
         let label = self.label + " " + &rhs.label;
         Self { chart, label }
     }
@@ -469,5 +472,30 @@ impl Game {
             order,
             generation,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn combine_charts_test() {
+        let mut chart1 = HashMap::new();
+        chart1.insert("fire".to_string(), 2.0);
+        chart1.insert("water".to_string(), 0.5);
+        chart1.insert("steel".to_string(), 0.0);
+
+        let mut chart2 = HashMap::new();
+        chart2.insert("fire".to_string(), 2.0);
+        chart2.insert("water".to_string(), 1.0);
+        chart2.insert("ice".to_string(), 1.0);
+
+        let combined = combine_charts(&chart1, &chart2);
+
+        assert_eq!(combined.get("fire"), Some(&4.0));
+        assert_eq!(combined.get("water"), Some(&0.5));
+        assert_eq!(combined.get("steel"), Some(&0.0));
+        assert_eq!(combined.get("ice"), Some(&1.0));
     }
 }
