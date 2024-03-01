@@ -5,13 +5,17 @@ use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
 use indoc::{formatdoc, printdoc};
 
-use crate::data::api::resource::{
-    AbilityResource, GameResource, GetGeneration, MoveResource, PokemonResource, Resource,
-    TypeResource,
-};
+use crate::data::api::utils::get_all_game_data;
 use crate::data::api::ApiWrapper;
+use crate::data::once::game_resource;
+use crate::data::resource::{
+    app_directory_data, AbilityResource, GameResource, GetGeneration, MoveResource,
+    PokemonResource, Resource, TypeResource,
+};
 use crate::data::{Ability, Move, Pokemon, PokemonData, Type};
 use display::*;
+
+use std::fs;
 
 const VERSION: &str = env!("DUNSPARS_VERSION");
 
@@ -111,6 +115,7 @@ enum CacheAction {
 }
 
 pub async fn run() -> Result<()> {
+    load_game_data().await?;
     let cli = Cli::parse();
     let api = ApiWrapper::try_new().await?;
 
@@ -155,6 +160,16 @@ pub async fn run() -> Result<()> {
         } => program.run_resource(resource, delimiter).await?,
         Commands::Cache { action } => program.run_cache(action).await?,
     }
+
+    Ok(())
+}
+
+async fn load_game_data() -> Result<()> {
+    let game_data = get_all_game_data().await?;
+    let mut data_dir = app_directory_data("resources/");
+    fs::create_dir_all(&data_dir)?;
+    data_dir.push("games.yaml");
+    fs::write(data_dir, serde_yaml::to_string(&game_data).unwrap())?;
 
     Ok(())
 }
@@ -287,7 +302,7 @@ impl Program {
             offense_chart,
             defense_chart,
             ..
-        } = Type::from_name(&self.api, &type_name, self.config.generation).await?;
+        } = Type::from_name(&type_name, self.config.generation).await?;
 
         let offense_chart_ctx = TypeChartComponent {
             type_chart: &offense_chart,
@@ -439,10 +454,7 @@ impl Program {
                 .await?
                 .resource()
                 .join(&delimiter),
-            ResourceArgs::Games => GameResource::try_new(&self.api.client)
-                .await?
-                .resource()
-                .join(&delimiter),
+            ResourceArgs::Games => game_resource().resource().join(&delimiter),
         };
 
         printdoc! {

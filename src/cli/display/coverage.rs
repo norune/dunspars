@@ -1,5 +1,4 @@
 use super::{Colors, DisplayComponent};
-use crate::data::api::ApiWrapper;
 use crate::data::{Pokemon, PokemonData, Type, TypeChart, TypeCharts, TYPES};
 
 use std::collections::{hash_map::Entry, HashMap};
@@ -9,24 +8,23 @@ use anyhow::Result;
 
 pub struct CoverageComponent<'a, 'b> {
     pokemon: &'a Vec<Pokemon<'b>>,
-    resource: HashMap<String, Type<'b>>,
+    resource: HashMap<String, Type>,
 }
 impl<'a, 'b> CoverageComponent<'a, 'b> {
     pub async fn try_new(pokemon: &'a Vec<Pokemon<'b>>) -> Result<Self> {
         let mut resource = HashMap::new();
         for mon in pokemon {
             let PokemonData {
-                api,
                 generation,
                 ref primary_type,
                 ref secondary_type,
                 ..
             } = mon.data;
 
-            Self::add_type_to_resource(primary_type, api, generation, &mut resource).await?;
+            Self::add_type_to_resource(primary_type, generation, &mut resource).await?;
 
             if let Some(secondary_type) = secondary_type {
-                Self::add_type_to_resource(secondary_type, api, generation, &mut resource).await?;
+                Self::add_type_to_resource(secondary_type, generation, &mut resource).await?;
             }
         }
 
@@ -35,12 +33,11 @@ impl<'a, 'b> CoverageComponent<'a, 'b> {
 
     async fn add_type_to_resource<'c>(
         type_: &str,
-        api: &'b ApiWrapper,
         generation: u8,
-        resource: &'c mut HashMap<String, Type<'b>>,
+        resource: &'c mut HashMap<String, Type>,
     ) -> Result<()> {
         if resource.get(type_).is_none() {
-            let type_data = Type::from_name(api, type_, generation).await?;
+            let type_data = Type::from_name(type_, generation).await?;
             resource.insert(type_data.name.clone(), type_data);
         }
         Ok(())

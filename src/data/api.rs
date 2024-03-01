@@ -1,5 +1,11 @@
-pub mod resource;
-mod utils;
+pub mod utils;
+
+use crate::data::once::{api_client, game_resource};
+use crate::data::resource::{GameResource, GetGeneration};
+use crate::data::{
+    Ability, DefenseTypeChart, EvolutionStep, Move, OffenseTypeChart, PokemonData, PokemonGroup,
+    Stats, Type, TypeChart,
+};
 
 use std::collections::HashMap;
 
@@ -26,11 +32,47 @@ use rustemon::model::pokemon::{
 };
 use rustemon::model::resource::VerboseEffect as RustemonVerboseEffect;
 
-use crate::data::{
-    Ability, DefenseTypeChart, EvolutionStep, Move, OffenseTypeChart, PokemonData, PokemonGroup,
-    Stats, Type, TypeChart,
-};
-use resource::{GameResource, GetGeneration, Resource};
+pub async fn get_type(type_str: &str, current_generation: u8) -> Result<Type> {
+    let RustemonType {
+        name,
+        damage_relations,
+        past_damage_relations,
+        generation,
+        ..
+    } = rustemon_type::get_by_name(type_str, api_client()).await?;
+
+    check_generation("Type", type_str, &generation.url, current_generation)?;
+
+    let relations = utils::match_past(current_generation, &past_damage_relations, game_resource())
+        .unwrap_or(damage_relations);
+
+    let mut offense_chart = OffenseTypeChart::from(&relations);
+    offense_chart.set_label(type_str);
+    let mut defense_chart = DefenseTypeChart::from(&relations);
+    defense_chart.set_label(type_str);
+
+    Ok(Type {
+        name,
+        offense_chart,
+        defense_chart,
+        generation: current_generation,
+    })
+}
+
+pub fn check_generation(
+    resource: &'static str,
+    label: &str,
+    url: &str,
+    current_generation: u8,
+) -> Result<()> {
+    let generation = game_resource().get_gen_from_url(url);
+    if current_generation < generation {
+        bail!(format!(
+            "{resource} '{label}' is not present in generation {current_generation}"
+        ))
+    }
+    Ok(())
+}
 
 #[derive(Debug)]
 pub struct ApiWrapper {
@@ -57,7 +99,7 @@ impl ApiWrapper {
             .with_mode(cache_mode)
             .try_build()?;
 
-        let game_resource = GameResource::try_new(&client).await?;
+        let game_resource = GameResource::try_new()?;
 
         Ok(Self {
             client,
@@ -211,7 +253,6 @@ impl ApiWrapper {
             offense_chart,
             defense_chart,
             generation: current_generation,
-            api: self,
         })
     }
 

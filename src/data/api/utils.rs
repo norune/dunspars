@@ -1,4 +1,6 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
+use futures::stream::FuturesOrdered;
+use futures::StreamExt;
 
 use rustemon::client::RustemonClient;
 use rustemon::games::version_group as rustemon_version;
@@ -18,9 +20,10 @@ use rustemon::model::pokemon::{
 };
 use rustemon::model::resource::Effect as RustemonEffect;
 
-use super::resource::GetGeneration;
+use crate::data::once::{api_client, gen_url_regex};
+use crate::data::resource::GetGeneration;
 use crate::data::{
-    DefenseTypeChart, EvolutionMethod, EvolutionStep, NewTypeChart, OffenseTypeChart, Stats,
+    DefenseTypeChart, EvolutionMethod, EvolutionStep, Game, NewTypeChart, OffenseTypeChart, Stats,
 };
 
 use std::collections::HashMap;
@@ -127,6 +130,34 @@ pub async fn get_all_games(client: &RustemonClient) -> Result<Vec<String>> {
         .into_iter()
         .map(|p| p.name)
         .collect::<Vec<String>>())
+}
+
+pub async fn get_all_game_data() -> Result<Vec<Game>> {
+    let game_names = get_all_games(api_client()).await?;
+    let game_data_futures: FuturesOrdered<_> = game_names
+        .iter()
+        .map(|g| rustemon_version::get_by_name(g, api_client()))
+        .collect();
+    let game_results: Vec<_> = game_data_futures.collect().await;
+    let mut game_data = vec![];
+
+    for (i, result) in game_results.into_iter().enumerate() {
+        let result = result?;
+        let generation = capture_gen_url(&result.generation.url).unwrap();
+        let game = Game::new(result.name, i as u8, generation);
+
+        game_data.push(game);
+    }
+
+    Ok(game_data)
+}
+
+pub fn capture_gen_url(url: &str) -> Result<u8> {
+    if let Some(caps) = gen_url_regex().captures(url) {
+        Ok(caps["gen"].parse::<u8>()?)
+    } else {
+        Err(anyhow!("Generation not found in resource url"))
+    }
 }
 
 impl From<RustemonEvoStep> for EvolutionStep {

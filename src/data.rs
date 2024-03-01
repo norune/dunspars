@@ -1,4 +1,7 @@
 pub mod api;
+pub mod once;
+pub mod resource;
+use api::ApiWrapper;
 
 use std::collections::HashMap;
 use std::ops::Add;
@@ -6,8 +9,7 @@ use std::ops::Add;
 use anyhow::Result;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
-
-use api::ApiWrapper;
+use serde::{Deserialize, Serialize};
 
 pub struct Pokemon<'a> {
     pub data: PokemonData<'a>,
@@ -67,10 +69,10 @@ impl<'a> PokemonData<'a> {
     }
 
     pub async fn get_defense_chart(&self) -> Result<DefenseTypeChart> {
-        let primary_type = Type::from_name(self.api, &self.primary_type, self.generation).await?;
+        let primary_type = Type::from_name(&self.primary_type, self.generation).await?;
 
         if let Some(secondary_type) = &self.secondary_type {
-            let secondary_type = Type::from_name(self.api, secondary_type, self.generation).await?;
+            let secondary_type = Type::from_name(secondary_type, self.generation).await?;
 
             Ok(primary_type.defense_chart + secondary_type.defense_chart)
         } else {
@@ -101,17 +103,16 @@ pub struct Stats {
 }
 
 #[derive(Debug)]
-pub struct Type<'a> {
+pub struct Type {
     pub name: String,
     pub offense_chart: OffenseTypeChart,
     pub defense_chart: DefenseTypeChart,
     pub generation: u8,
-    pub api: &'a ApiWrapper,
 }
 
-impl<'a> Type<'a> {
-    pub async fn from_name(api: &'a ApiWrapper, name: &str, generation: u8) -> Result<Self> {
-        api.get_type(name, generation).await
+impl Type {
+    pub async fn from_name(name: &str, generation: u8) -> Result<Self> {
+        api::get_type(name, generation).await
     }
 }
 
@@ -297,7 +298,7 @@ impl<'a> Ability<'a> {
     }
 }
 
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, Serialize)]
 pub struct EvolutionStep {
     pub name: String,
     pub methods: Vec<EvolutionMethod>,
@@ -318,7 +319,7 @@ impl EvolutionStep {
     }
 }
 
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, Serialize)]
 pub struct EvolutionMethod {
     pub trigger: String,
     pub item: Option<String>,
@@ -458,7 +459,7 @@ pub fn is_stab(type_: &str, pokemon: &PokemonData) -> bool {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Game {
     pub name: String,
     pub order: u8,

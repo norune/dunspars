@@ -1,14 +1,12 @@
 use std::collections::HashMap;
+use std::fs;
+use std::path::PathBuf;
 
-use anyhow::{anyhow, bail, Result};
-use futures::stream::FuturesOrdered;
-use futures::StreamExt;
-use regex::Regex;
+use anyhow::{bail, Result};
 
 use rustemon::client::RustemonClient;
-use rustemon::games::version_group as rustemon_version;
 
-use super::utils;
+use crate::data::api::utils::{self, capture_gen_url};
 use crate::data::Game;
 
 pub enum ResourceResult {
@@ -16,7 +14,6 @@ pub enum ResourceResult {
     Invalid(Vec<String>),
 }
 
-#[allow(async_fn_in_trait)]
 pub trait Resource: Sized {
     fn get_matches(&self, value: &str) -> Vec<String> {
         self.resource()
@@ -71,7 +68,6 @@ pub trait Resource: Sized {
         message
     }
 
-    async fn try_new(api: &RustemonClient) -> Result<Self>;
     fn resource(&self) -> Vec<String>;
     fn label() -> &'static str;
 }
@@ -80,12 +76,13 @@ pub trait Resource: Sized {
 pub struct PokemonResource {
     resource: Vec<String>,
 }
-impl Resource for PokemonResource {
-    async fn try_new(client: &RustemonClient) -> Result<Self> {
+impl PokemonResource {
+    pub async fn try_new(client: &RustemonClient) -> Result<Self> {
         let resource = utils::get_all_pokemon(client).await?;
         Ok(Self { resource })
     }
-
+}
+impl Resource for PokemonResource {
     fn resource(&self) -> Vec<String> {
         self.resource.clone()
     }
@@ -99,12 +96,13 @@ impl Resource for PokemonResource {
 pub struct TypeResource {
     resource: Vec<String>,
 }
-impl Resource for TypeResource {
-    async fn try_new(client: &RustemonClient) -> Result<Self> {
+impl TypeResource {
+    pub async fn try_new(client: &RustemonClient) -> Result<Self> {
         let resource = utils::get_all_types(client).await?;
         Ok(Self { resource })
     }
-
+}
+impl Resource for TypeResource {
     fn resource(&self) -> Vec<String> {
         self.resource.clone()
     }
@@ -118,12 +116,13 @@ impl Resource for TypeResource {
 pub struct MoveResource {
     resource: Vec<String>,
 }
-impl Resource for MoveResource {
-    async fn try_new(client: &RustemonClient) -> Result<Self> {
+impl MoveResource {
+    pub async fn try_new(client: &RustemonClient) -> Result<Self> {
         let resource = utils::get_all_moves(client).await?;
         Ok(Self { resource })
     }
-
+}
+impl Resource for MoveResource {
     fn resource(&self) -> Vec<String> {
         self.resource.clone()
     }
@@ -137,12 +136,13 @@ impl Resource for MoveResource {
 pub struct AbilityResource {
     resource: Vec<String>,
 }
-impl Resource for AbilityResource {
-    async fn try_new(client: &RustemonClient) -> Result<Self> {
+impl AbilityResource {
+    pub async fn try_new(client: &RustemonClient) -> Result<Self> {
         let resource = utils::get_all_abilities(client).await?;
         Ok(Self { resource })
     }
-
+}
+impl Resource for AbilityResource {
     fn resource(&self) -> Vec<String> {
         self.resource.clone()
     }
@@ -155,35 +155,22 @@ impl Resource for AbilityResource {
 #[derive(Debug)]
 pub struct GameResource {
     resource: HashMap<String, Game>,
-    gen_url_regex: Regex,
 }
-impl Resource for GameResource {
-    async fn try_new(client: &RustemonClient) -> Result<Self> {
-        // PokéAPI keeps generation names in Roman numerals.
-        // Might be quicker to just take it from resource urls via regex instead.
-        // Regex compilation is expensive, so we're compiling it just once here.
-        let gen_url_regex = Regex::new(r"generation/(?P<gen>\d+)/?$").unwrap();
-
+impl GameResource {
+    pub fn try_new() -> Result<Self> {
         let mut resource = HashMap::new();
-        let game_names = utils::get_all_games(client).await?;
-        let game_data_futures: FuturesOrdered<_> = game_names
-            .iter()
-            .map(|g| rustemon_version::get_by_name(g, client))
-            .collect();
-        let game_data: Vec<_> = game_data_futures.collect().await;
 
-        for (i, game) in game_data.into_iter().enumerate() {
-            let game = game?;
-            let generation = capture_gen_url(&game.generation.url, &gen_url_regex).unwrap();
-            resource.insert(game.name.clone(), Game::new(game.name, i as u8, generation));
+        let data_dir = app_directory_data("resources/games.yaml");
+        let game_data: Vec<Game> = serde_yaml::from_str(&fs::read_to_string(data_dir)?)?;
+
+        for game in game_data {
+            resource.insert(game.name.clone(), game);
         }
 
-        Ok(Self {
-            resource,
-            gen_url_regex,
-        })
+        Ok(Self { resource })
     }
-
+}
+impl Resource for GameResource {
     fn resource(&self) -> Vec<String> {
         let mut games = self.resource.iter().map(|r| r.1).collect::<Vec<&Game>>();
         games.sort_by_key(|g| g.order);
@@ -209,14 +196,44 @@ impl GetGeneration for GameResource {
     }
 
     fn get_gen_from_url(&self, url: &str) -> u8 {
-        capture_gen_url(url, &self.gen_url_regex).unwrap()
+        capture_gen_url(url).unwrap()
     }
 }
 
-fn capture_gen_url(url: &str, gen_url_regex: &Regex) -> Result<u8> {
-    if let Some(caps) = gen_url_regex.captures(url) {
-        Ok(caps["gen"].parse::<u8>()?)
-    } else {
-        Err(anyhow!("Generation not found in resource url"))
+enum AppDirectories {
+    Cache,
+    Data,
+    Config,
+}
+
+impl std::fmt::Display for AppDirectories {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AppDirectories::Cache => write!(f, "Cache"),
+            AppDirectories::Data => write!(f, "Data"),
+            AppDirectories::Config => write!(f, "Config"),
+        }
     }
+}
+
+pub fn app_directory_cache(target_dir: &str) -> PathBuf {
+    app_directory(AppDirectories::Cache, target_dir)
+}
+pub fn app_directory_data(target_dir: &str) -> PathBuf {
+    app_directory(AppDirectories::Data, target_dir)
+}
+pub fn app_directory_config(target_dir: &str) -> PathBuf {
+    app_directory(AppDirectories::Config, target_dir)
+}
+
+fn app_directory(base_dir: AppDirectories, target_dir: &str) -> PathBuf {
+    let base_path_buf = match base_dir {
+        AppDirectories::Cache => dirs::cache_dir(),
+        AppDirectories::Data => dirs::data_local_dir(),
+        AppDirectories::Config => dirs::config_local_dir(),
+    };
+    let mut directory = base_path_buf.unwrap_or_else(|| panic!("{base_dir} directory not found"));
+
+    directory.push(format!("dunspars/{target_dir}"));
+    directory
 }
