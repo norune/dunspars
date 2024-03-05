@@ -5,17 +5,14 @@ use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
 use indoc::{formatdoc, printdoc};
 
-use crate::data::api::utils::get_all_game_data;
-use crate::data::api::ApiWrapper;
-use crate::data::once::game_resource;
+use crate::data::api;
+use crate::data::once::{api_client, game_resource};
 use crate::data::resource::{
-    app_directory_data, AbilityResource, GameResource, GetGeneration, MoveResource,
-    PokemonResource, Resource, TypeResource,
+    AbilityResource, GameResourceFile, GetGeneration, MoveResource, PokemonResource, Resource,
+    ResourceFile, TypeResource,
 };
 use crate::data::{Ability, Move, Pokemon, PokemonData, Type};
 use display::*;
-
-use std::fs;
 
 const VERSION: &str = env!("DUNSPARS_VERSION");
 
@@ -92,11 +89,11 @@ enum Commands {
         #[arg(short, long)]
         delimiter: Option<String>,
     },
-    /// Actions regarding the program's cache
-    Cache {
-        /// Action to undertake
+    /// Reset program files
+    Reset {
+        /// Which program data to reset
         #[arg(value_enum)]
-        action: CacheAction,
+        type_: ResetType,
     },
 }
 
@@ -110,16 +107,18 @@ enum ResourceArgs {
 }
 
 #[derive(Clone, clap::ValueEnum)]
-enum CacheAction {
-    Clear,
+enum ResetType {
+    Cache,
+    Data,
 }
 
 pub async fn run() -> Result<()> {
-    load_game_data().await?;
     let cli = Cli::parse();
-    let api = ApiWrapper::try_new().await?;
 
-    let mut config_builder = ConfigBuilder::new(&api.game_resource);
+    let game_resource_file = GameResourceFile::try_new()?;
+    game_resource_file.build_if_missing(false).await?;
+
+    let mut config_builder = ConfigBuilder::new();
     if let Some(game) = cli.game {
         config_builder = config_builder.game(game);
     }
@@ -131,7 +130,7 @@ pub async fn run() -> Result<()> {
     }
     let config = config_builder.build()?;
 
-    let program = Program::new(config, api);
+    let program = Program::new(config);
 
     match cli.command {
         Commands::Pokemon {
@@ -158,32 +157,20 @@ pub async fn run() -> Result<()> {
             resource,
             delimiter,
         } => program.run_resource(resource, delimiter).await?,
-        Commands::Cache { action } => program.run_cache(action).await?,
+        Commands::Reset { type_ } => program.run_reset(type_).await?,
     }
 
     Ok(())
 }
 
-async fn load_game_data() -> Result<()> {
-    let game_data = get_all_game_data().await?;
-    let mut data_dir = app_directory_data("resources/");
-    fs::create_dir_all(&data_dir)?;
-    data_dir.push("games.yaml");
-    fs::write(data_dir, serde_yaml::to_string(&game_data).unwrap())?;
-
-    Ok(())
-}
-
-struct ConfigBuilder<'a> {
+struct ConfigBuilder {
     game: Option<String>,
     color_enabled: Option<bool>,
-    game_resource: &'a GameResource,
 }
 
-impl<'a> ConfigBuilder<'a> {
-    pub fn new(game_resource: &'a GameResource) -> Self {
+impl ConfigBuilder {
+    pub fn new() -> Self {
         ConfigBuilder {
-            game_resource,
             game: None,
             color_enabled: None,
         }
@@ -201,13 +188,13 @@ impl<'a> ConfigBuilder<'a> {
 
     pub fn build(self) -> Result<Config> {
         let game = match self.game {
-            Some(game) => self.game_resource.validate(&game)?,
+            Some(game) => game_resource().validate(&game)?,
             None => self
                 .get_latest_game()
                 .ok_or(anyhow!("Cannot find the latest game"))?,
         };
 
-        let generation = self.game_resource.get_gen(&game);
+        let generation = game_resource().get_gen(&game);
         let color_enabled = self.color_enabled.unwrap_or(utils::is_color_enabled());
 
         Ok(Config {
@@ -218,7 +205,7 @@ impl<'a> ConfigBuilder<'a> {
     }
 
     fn get_latest_game(&self) -> Option<String> {
-        self.game_resource.resource().last().map(|g| g.to_string())
+        game_resource().resource().last().map(|g| g.to_string())
     }
 }
 
@@ -230,19 +217,18 @@ struct Config {
 
 struct Program {
     config: Config,
-    api: ApiWrapper,
 }
 
 impl Program {
-    pub fn new(config: Config, api: ApiWrapper) -> Self {
-        Self { config, api }
+    pub fn new(config: Config) -> Self {
+        Self { config }
     }
 
     async fn run_pokemon(&self, name: String, moves: bool, evolution: bool) -> Result<String> {
-        let resource = PokemonResource::try_new(&self.api.client).await?;
+        let resource = PokemonResource::try_new(api_client()).await?;
         let pokemon_name = resource.validate(&name)?;
 
-        let pokemon = PokemonData::from_name(&self.api, &pokemon_name, &self.config.game).await?;
+        let pokemon = PokemonData::from_name(&pokemon_name, &self.config.game).await?;
         let pokemon_display = DisplayComponent::new(&pokemon, self.config.color_enabled);
 
         let defense_chart = pokemon.get_defense_chart().await?;
@@ -295,7 +281,7 @@ impl Program {
     }
 
     async fn run_type(&self, name: String) -> Result<String> {
-        let resource = TypeResource::try_new(&self.api.client).await?;
+        let resource = TypeResource::try_new(api_client()).await?;
         let type_name = resource.validate(&name)?;
 
         let Type {
@@ -334,11 +320,10 @@ impl Program {
         verbose: bool,
         stab_only: bool,
     ) -> Result<String> {
-        let resource = PokemonResource::try_new(&self.api.client).await?;
+        let resource = PokemonResource::try_new(api_client()).await?;
 
         let attacker_name = resource.validate(&attacker_name)?;
-        let attacker_data =
-            PokemonData::from_name(&self.api, &attacker_name, &self.config.game).await?;
+        let attacker_data = PokemonData::from_name(&attacker_name, &self.config.game).await?;
         let attacker_moves = attacker_data.get_moves().await?;
         let attacker_chart = attacker_data.get_defense_chart().await?;
         let attacker = Pokemon::new(attacker_data, attacker_chart, attacker_moves);
@@ -347,8 +332,7 @@ impl Program {
 
         for defender_name in defender_names {
             let defender_name = resource.validate(&defender_name)?;
-            let defender_data =
-                PokemonData::from_name(&self.api, &defender_name, &self.config.game).await?;
+            let defender_data = PokemonData::from_name(&defender_name, &self.config.game).await?;
             let defender_moves = defender_data.get_moves().await?;
             let defender_chart = defender_data.get_defense_chart().await?;
             let defender = Pokemon::new(defender_data, defender_chart, defender_moves);
@@ -380,12 +364,12 @@ impl Program {
     }
 
     async fn run_coverage(&self, names: Vec<String>) -> Result<String> {
-        let resource = PokemonResource::try_new(&self.api.client).await?;
+        let resource = PokemonResource::try_new(api_client()).await?;
         let mut pokemon = vec![];
 
         for name in names {
             let name = resource.validate(&name)?;
-            let data = PokemonData::from_name(&self.api, &name, &self.config.game).await?;
+            let data = PokemonData::from_name(&name, &self.config.game).await?;
             let moves = data.get_moves().await?;
             let chart = data.get_defense_chart().await?;
 
@@ -404,10 +388,10 @@ impl Program {
     }
 
     async fn run_move(&self, name: String) -> Result<String> {
-        let resource = MoveResource::try_new(&self.api.client).await?;
+        let resource = MoveResource::try_new(api_client()).await?;
         let move_name = resource.validate(&name)?;
 
-        let move_ = Move::from_name(&self.api, &move_name, self.config.generation).await?;
+        let move_ = Move::from_name(&move_name, self.config.generation).await?;
         let move_display = DisplayComponent::new(&move_, self.config.color_enabled);
 
         let output = formatdoc! {
@@ -420,10 +404,10 @@ impl Program {
     }
 
     async fn run_ability(&self, name: String) -> Result<String> {
-        let resource = AbilityResource::try_new(&self.api.client).await?;
+        let resource = AbilityResource::try_new(api_client()).await?;
         let ability_name = resource.validate(&name)?;
 
-        let ability = Ability::from_name(&self.api, &ability_name, self.config.generation).await?;
+        let ability = Ability::from_name(&ability_name, self.config.generation).await?;
         let ability_display = DisplayComponent::new(&ability, self.config.color_enabled);
 
         let output = formatdoc! {
@@ -438,19 +422,19 @@ impl Program {
     async fn run_resource(&self, resource: ResourceArgs, delimiter: Option<String>) -> Result<()> {
         let delimiter = delimiter.unwrap_or("\n".to_string());
         let resource = match resource {
-            ResourceArgs::Pokemon => PokemonResource::try_new(&self.api.client)
+            ResourceArgs::Pokemon => PokemonResource::try_new(api_client())
                 .await?
                 .resource()
                 .join(&delimiter),
-            ResourceArgs::Moves => MoveResource::try_new(&self.api.client)
+            ResourceArgs::Moves => MoveResource::try_new(api_client())
                 .await?
                 .resource()
                 .join(&delimiter),
-            ResourceArgs::Abilities => AbilityResource::try_new(&self.api.client)
+            ResourceArgs::Abilities => AbilityResource::try_new(api_client())
                 .await?
                 .resource()
                 .join(&delimiter),
-            ResourceArgs::Types => TypeResource::try_new(&self.api.client)
+            ResourceArgs::Types => TypeResource::try_new(api_client())
                 .await?
                 .resource()
                 .join(&delimiter),
@@ -466,9 +450,14 @@ impl Program {
         Ok(())
     }
 
-    async fn run_cache(&self, action: CacheAction) -> Result<()> {
+    async fn run_reset(&self, action: ResetType) -> Result<()> {
         match action {
-            CacheAction::Clear => self.api.clear_cache().await,
+            ResetType::Cache => api::clear_cache().await,
+            ResetType::Data => {
+                let game_writer = GameResourceFile::try_new()?;
+                game_writer.build_if_missing(true).await?;
+                Ok(())
+            }
         }
     }
 }
@@ -478,13 +467,12 @@ mod tests {
     use super::*;
 
     async fn setup_program(game: &str) -> Program {
-        let api = ApiWrapper::try_new().await.unwrap();
-        let config = ConfigBuilder::new(&api.game_resource)
+        let config = ConfigBuilder::new()
             .game(String::from(game))
             .color_enabled(false)
             .build()
             .unwrap();
-        Program::new(config, api)
+        Program::new(config)
     }
 
     #[tokio::test]

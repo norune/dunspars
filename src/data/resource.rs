@@ -1,12 +1,13 @@
 use std::collections::HashMap;
 use std::fs;
-use std::path::PathBuf;
+use std::io;
+use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Result};
 
 use rustemon::client::RustemonClient;
 
-use crate::data::api::utils::{self, capture_gen_url};
+use crate::data::api::utils::{self, capture_gen_url, get_all_game_data};
 use crate::data::Game;
 
 pub enum ResourceResult {
@@ -160,8 +161,8 @@ impl GameResource {
     pub fn try_new() -> Result<Self> {
         let mut resource = HashMap::new();
 
-        let data_dir = app_directory_data("resources/games.yaml");
-        let game_data: Vec<Game> = serde_yaml::from_str(&fs::read_to_string(data_dir)?)?;
+        let resource_file = GameResourceFile::try_new()?;
+        let game_data: Vec<Game> = resource_file.read_and_parse()?;
 
         for game in game_data {
             resource.insert(game.name.clone(), game);
@@ -236,4 +237,81 @@ fn app_directory(base_dir: AppDirectories, target_dir: &str) -> PathBuf {
 
     directory.push(format!("dunspars/{target_dir}"));
     directory
+}
+
+pub trait File {
+    fn build_dir(file: &str) -> Result<PathBuf> {
+        let mut dir = Self::dir();
+
+        if !path_exists(&dir) {
+            fs::create_dir_all(&dir)?;
+        }
+        dir.push(file);
+
+        Ok(dir)
+    }
+
+    fn write(&self, data: &str) -> io::Result<()> {
+        fs::write(self.get_path(), data)
+    }
+
+    fn read(&self) -> io::Result<String> {
+        fs::read_to_string(self.get_path())
+    }
+
+    fn get_path(&self) -> &PathBuf;
+    fn dir() -> PathBuf;
+}
+
+#[allow(async_fn_in_trait)]
+pub trait ResourceFile<T: serde::Serialize + serde::de::DeserializeOwned>: File {
+    async fn build_if_missing(&self, overwrite: bool) -> Result<()> {
+        if overwrite || !path_exists(self.get_path()) {
+            let data = Self::get_resource_data().await?;
+            let stringified_data = serde_yaml::to_string(&data)?;
+            self.write(&stringified_data)?;
+        }
+
+        Ok(())
+    }
+
+    fn read_and_parse(&self) -> Result<T> {
+        let file_data = self.read()?;
+        let resource_data: T = serde_yaml::from_str(&file_data)?;
+        Ok(resource_data)
+    }
+
+    async fn get_resource_data() -> Result<T>;
+}
+
+pub struct GameResourceFile {
+    path: PathBuf,
+}
+impl GameResourceFile {
+    pub fn try_new() -> Result<Self> {
+        let path = Self::build_dir("games.yaml")?;
+        Ok(Self { path })
+    }
+}
+impl File for GameResourceFile {
+    fn dir() -> PathBuf {
+        app_directory_data("resources/")
+    }
+
+    fn get_path(&self) -> &PathBuf {
+        &self.path
+    }
+}
+impl ResourceFile<Vec<Game>> for GameResourceFile {
+    async fn get_resource_data() -> Result<Vec<Game>> {
+        get_all_game_data().await
+    }
+}
+
+fn path_exists(path: &Path) -> bool {
+    if let Ok(exists) = path.try_exists() {
+        exists
+    } else {
+        false
+    }
 }

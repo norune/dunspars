@@ -1,7 +1,6 @@
 pub mod api;
 pub mod once;
 pub mod resource;
-use api::ApiWrapper;
 
 use std::collections::HashMap;
 use std::ops::Add;
@@ -11,18 +10,14 @@ use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 
-pub struct Pokemon<'a> {
-    pub data: PokemonData<'a>,
+pub struct Pokemon {
+    pub data: PokemonData,
     pub defense_chart: DefenseTypeChart,
-    pub move_list: MoveList<'a>,
+    pub move_list: MoveList,
 }
 
-impl<'a> Pokemon<'a> {
-    pub fn new(
-        data: PokemonData<'a>,
-        defense_chart: DefenseTypeChart,
-        move_list: MoveList<'a>,
-    ) -> Self {
+impl Pokemon {
+    pub fn new(data: PokemonData, defense_chart: DefenseTypeChart, move_list: MoveList) -> Self {
         Self {
             data,
             defense_chart,
@@ -32,7 +27,7 @@ impl<'a> Pokemon<'a> {
 }
 
 #[derive(Debug)]
-pub struct PokemonData<'a> {
+pub struct PokemonData {
     pub name: String,
     pub primary_type: String,
     pub secondary_type: Option<String>,
@@ -43,19 +38,18 @@ pub struct PokemonData<'a> {
     pub stats: Stats,
     pub abilities: Vec<(String, bool)>,
     pub species: String,
-    pub api: &'a ApiWrapper,
 }
 
-impl<'a> PokemonData<'a> {
-    pub async fn from_name(api: &'a ApiWrapper, name: &str, game: &str) -> Result<Self> {
-        api.get_pokemon(name, game).await
+impl PokemonData {
+    pub async fn from_name(name: &str, game: &str) -> Result<Self> {
+        api::get_pokemon(name, game).await
     }
 
-    pub async fn get_moves(&self) -> Result<MoveList<'a>> {
+    pub async fn get_moves(&self) -> Result<MoveList> {
         let moves_futures: FuturesUnordered<_> = self
             .learn_moves
             .iter()
-            .map(|mv| Move::from_name(self.api, mv.0, self.generation))
+            .map(|mv| Move::from_name(mv.0, self.generation))
             .collect();
         let moves_results: Vec<_> = moves_futures.collect().await;
 
@@ -81,7 +75,7 @@ impl<'a> PokemonData<'a> {
     }
 
     pub async fn get_evolution_steps(&self) -> Result<EvolutionStep> {
-        self.api.get_evolution_steps(&self.species).await
+        api::get_evolution(&self.species).await
     }
 }
 
@@ -249,7 +243,7 @@ impl Add for DefenseTypeChart {
 }
 
 #[derive(Debug)]
-pub struct Move<'a> {
+pub struct Move {
     pub name: String,
     pub accuracy: Option<i64>,
     pub power: Option<i64>,
@@ -260,41 +254,39 @@ pub struct Move<'a> {
     pub short_effect: String,
     pub effect_chance: Option<i64>,
     pub generation: u8,
-    pub api: &'a ApiWrapper,
 }
 
-impl<'a> Move<'a> {
-    pub async fn from_name(api: &'a ApiWrapper, name: &str, generation: u8) -> Result<Self> {
-        api.get_move(name, generation).await
+impl Move {
+    pub async fn from_name(move_name: &str, generation: u8) -> Result<Self> {
+        api::get_move(move_name, generation).await
     }
 }
 
-pub struct MoveList<'a> {
-    value: HashMap<String, Move<'a>>,
+pub struct MoveList {
+    value: HashMap<String, Move>,
 }
 
-impl<'a> MoveList<'a> {
-    pub fn new(hashmap: HashMap<String, Move<'a>>) -> MoveList<'a> {
+impl MoveList {
+    pub fn new(hashmap: HashMap<String, Move>) -> MoveList {
         MoveList { value: hashmap }
     }
 
-    pub fn get_map(&self) -> &HashMap<String, Move<'a>> {
+    pub fn get_map(&self) -> &HashMap<String, Move> {
         &self.value
     }
 }
 
 #[derive(Debug)]
-pub struct Ability<'a> {
+pub struct Ability {
     pub name: String,
     pub effect: String,
     pub short_effect: String,
     pub generation: u8,
-    pub api: &'a ApiWrapper,
 }
 
-impl<'a> Ability<'a> {
-    pub async fn from_name(api: &'a ApiWrapper, name: &str, generation: u8) -> Result<Self> {
-        api.get_ability(name, generation).await
+impl Ability {
+    pub async fn from_name(name: &str, generation: u8) -> Result<Self> {
+        api::get_ability(name, generation).await
     }
 }
 

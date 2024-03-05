@@ -5,7 +5,7 @@ use std::fmt;
 
 use indoc::writedoc;
 
-impl fmt::Display for DisplayComponent<&Ability<'_>> {
+impl fmt::Display for DisplayComponent<&Ability> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let Ability { name, effect, .. } = self.context;
 

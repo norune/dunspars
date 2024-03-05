@@ -5,7 +5,7 @@ use std::fmt;
 
 use indoc::writedoc;
 
-impl fmt::Display for DisplayComponent<&PokemonData<'_>> {
+impl fmt::Display for DisplayComponent<&PokemonData> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let PokemonData {
             name,

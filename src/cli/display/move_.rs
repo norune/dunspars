@@ -5,7 +5,7 @@ use std::fmt;
 
 use indoc::writedoc;
 
-impl fmt::Display for DisplayComponent<&Move<'_>> {
+impl fmt::Display for DisplayComponent<&Move> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let Move {
             power,

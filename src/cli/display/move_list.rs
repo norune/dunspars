@@ -5,12 +5,12 @@ use std::fmt;
 
 use indoc::writedoc;
 
-pub struct MoveListComponent<'a, 'b> {
-    pub move_list: &'a MoveList<'b>,
-    pub pokemon: &'a PokemonData<'b>,
+pub struct MoveListComponent<'a> {
+    pub move_list: &'a MoveList,
+    pub pokemon: &'a PokemonData,
 }
 
-impl fmt::Display for DisplayComponent<MoveListComponent<'_, '_>> {
+impl fmt::Display for DisplayComponent<MoveListComponent<'_>> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,

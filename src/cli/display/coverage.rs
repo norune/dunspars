@@ -6,12 +6,12 @@ use std::fmt;
 
 use anyhow::Result;
 
-pub struct CoverageComponent<'a, 'b> {
-    pokemon: &'a Vec<Pokemon<'b>>,
+pub struct CoverageComponent<'a> {
+    pokemon: &'a Vec<Pokemon>,
     resource: HashMap<String, Type>,
 }
-impl<'a, 'b> CoverageComponent<'a, 'b> {
-    pub async fn try_new(pokemon: &'a Vec<Pokemon<'b>>) -> Result<Self> {
+impl<'a> CoverageComponent<'a> {
+    pub async fn try_new(pokemon: &'a Vec<Pokemon>) -> Result<Self> {
         let mut resource = HashMap::new();
         for mon in pokemon {
             let PokemonData {
@@ -44,7 +44,7 @@ impl<'a, 'b> CoverageComponent<'a, 'b> {
     }
 }
 
-impl fmt::Display for DisplayComponent<CoverageComponent<'_, '_>> {
+impl fmt::Display for DisplayComponent<CoverageComponent<'_>> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let (offense_coverage, defense_coverage) = self.build_coverages();
         let header = self.ansi_bold(Colors::Header);
@@ -59,7 +59,7 @@ impl fmt::Display for DisplayComponent<CoverageComponent<'_, '_>> {
     }
 }
 
-impl DisplayComponent<CoverageComponent<'_, '_>> {
+impl DisplayComponent<CoverageComponent<'_>> {
     fn write_coverage(
         &self,
         f: &mut fmt::Formatter,

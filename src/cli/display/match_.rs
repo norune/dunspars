@@ -5,14 +5,14 @@ use std::fmt;
 
 use indoc::writedoc;
 
-pub struct MatchComponent<'a, 'b> {
-    pub defender: &'a Pokemon<'b>,
-    pub attacker: &'a Pokemon<'b>,
+pub struct MatchComponent<'a> {
+    pub defender: &'a Pokemon,
+    pub attacker: &'a Pokemon,
     pub verbose: bool,
     pub stab_only: bool,
 }
 
-impl fmt::Display for DisplayComponent<MatchComponent<'_, '_>> {
+impl fmt::Display for DisplayComponent<MatchComponent<'_>> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let MatchComponent {
             defender,

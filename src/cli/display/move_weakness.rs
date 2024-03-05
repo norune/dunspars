@@ -5,14 +5,14 @@ use std::fmt;
 
 use indoc::writedoc;
 
-pub struct MoveWeaknessComponent<'a, 'b> {
-    pub defender: &'a Pokemon<'b>,
-    pub attacker: &'a Pokemon<'b>,
+pub struct MoveWeaknessComponent<'a> {
+    pub defender: &'a Pokemon,
+    pub attacker: &'a Pokemon,
     pub verbose: bool,
     pub stab_only: bool,
 }
 
-impl fmt::Display for DisplayComponent<MoveWeaknessComponent<'_, '_>> {
+impl fmt::Display for DisplayComponent<MoveWeaknessComponent<'_>> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let MoveWeaknessComponent {
             defender,
@@ -42,13 +42,8 @@ impl fmt::Display for DisplayComponent<MoveWeaknessComponent<'_, '_>> {
     }
 }
 
-impl<'a, 'b> WeaknessDisplay<&'a Move<'b>> for DisplayComponent<MoveWeaknessComponent<'_, '_>> {
-    fn format_group(
-        &self,
-        label: &'static str,
-        mut moves: Vec<&'a Move<'b>>,
-        color: Colors,
-    ) -> String {
+impl WeaknessDisplay<&Move> for DisplayComponent<MoveWeaknessComponent<'_>> {
+    fn format_group(&self, label: &'static str, mut moves: Vec<&Move>, color: Colors) -> String {
         let mut output = format!("\n{label}: ");
 
         let style = self.style().fg(color);
