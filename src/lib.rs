@@ -1,2 +1,4 @@
+pub mod api;
 pub mod cli;
-pub mod data;
+pub mod models;
+pub mod resource;

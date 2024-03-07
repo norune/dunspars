@@ -1,18 +1,18 @@
 mod display;
 mod utils;
 
+use crate::api;
+use crate::api::once::{api_client, game_resource};
+use crate::models::{Ability, Move, Pokemon, PokemonData, Type};
+use crate::resource::{
+    AbilityResource, DatabaseBuilder, GameResourceFile, GetGeneration, MoveResource,
+    PokemonResource, Resource, ResourceFile, TypeResource,
+};
+use display::*;
+
 use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
 use indoc::{formatdoc, printdoc};
-
-use crate::data::api;
-use crate::data::once::{api_client, game_resource};
-use crate::data::resource::{
-    AbilityResource, GameResourceFile, GetGeneration, MoveResource, PokemonResource, Resource,
-    ResourceFile, TypeResource,
-};
-use crate::data::{Ability, Move, Pokemon, PokemonData, Type};
-use display::*;
 
 const VERSION: &str = env!("DUNSPARS_VERSION");
 
@@ -34,6 +34,8 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Retrieve and set up program data. Run this before using the program
+    Setup,
     /// Prints general data about a Pokémon
     Pokemon {
         /// Name of the Pokémon
@@ -133,6 +135,7 @@ pub async fn run() -> Result<()> {
     let program = Program::new(config);
 
     match cli.command {
+        Commands::Setup => program.run_setup().await?,
         Commands::Pokemon {
             pokemon,
             moves,
@@ -459,6 +462,11 @@ impl Program {
                 Ok(())
             }
         }
+    }
+
+    async fn run_setup(&self) -> Result<()> {
+        let db = DatabaseBuilder::try_new()?;
+        db.build_db().await
     }
 }
 

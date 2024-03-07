@@ -1,5 +1,5 @@
 ---
-source: src/data/api.rs
+source: src/api.rs
 expression: applin
 ---
 name: applin

@@ -1,6 +1,6 @@
-pub mod api;
-pub mod once;
 pub mod resource;
+
+use crate::api;
 
 use std::collections::HashMap;
 use std::ops::Add;
@@ -162,7 +162,7 @@ pub enum TypeCharts {
     Defense,
 }
 
-trait NewTypeChart: Sized {
+pub trait NewTypeChart: Sized {
     fn new(chart: HashMap<String, f32>) -> Self {
         let default = default_chart();
         let new_chart = combine_charts(&default, &chart);
@@ -440,14 +440,6 @@ impl EvolutionMethod {
     pub fn turn_upside_down(mut self, turn_upside_down: bool) -> Self {
         self.turn_upside_down = Some(turn_upside_down);
         self
-    }
-}
-
-pub fn is_stab(type_: &str, pokemon: &PokemonData) -> bool {
-    if let Some(secondary_type) = &pokemon.secondary_type {
-        type_ == pokemon.primary_type || type_ == secondary_type
-    } else {
-        type_ == pokemon.primary_type
     }
 }
 

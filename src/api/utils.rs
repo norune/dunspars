@@ -1,3 +1,11 @@
+use super::once::{api_client, gen_url_regex};
+use crate::models::{
+    DefenseTypeChart, EvolutionMethod, EvolutionStep, Game, NewTypeChart, OffenseTypeChart, Stats,
+};
+use crate::resource::GetGeneration;
+
+use std::collections::HashMap;
+
 use anyhow::{anyhow, Result};
 use futures::stream::FuturesOrdered;
 use futures::StreamExt;
@@ -19,14 +27,6 @@ use rustemon::model::pokemon::{
     TypeRelations as RustemonTypeRelations, TypeRelationsPast as RustemonPastTypeRelations,
 };
 use rustemon::model::resource::Effect as RustemonEffect;
-
-use crate::data::once::{api_client, gen_url_regex};
-use crate::data::resource::GetGeneration;
-use crate::data::{
-    DefenseTypeChart, EvolutionMethod, EvolutionStep, Game, NewTypeChart, OffenseTypeChart, Stats,
-};
-
-use std::collections::HashMap;
 
 pub trait Past<T> {
     fn generation(&self, resource: &impl GetGeneration) -> u8;

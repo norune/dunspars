@@ -1,5 +1,5 @@
 use super::{Colors, DisplayComponent, WeaknessDisplay};
-use crate::data::{TypeChart, TypeCharts};
+use crate::models::{TypeChart, TypeCharts};
 
 use std::fmt;
 

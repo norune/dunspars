@@ -1,5 +1,6 @@
 use super::{Colors, DisplayComponent, Effects, WeaknessDisplay};
-use crate::data::{self, Move, Pokemon, TypeChart};
+use crate::cli::utils::is_stab;
+use crate::models::{Move, Pokemon, TypeChart};
 
 use std::fmt;
 
@@ -24,7 +25,7 @@ impl fmt::Display for DisplayComponent<MoveWeaknessComponent<'_>> {
         let weakness_groups = self.group_by_weakness(attacker.move_list.get_map(), |move_| {
             let multiplier = defender.defense_chart.get_multiplier(&move_.1.type_);
 
-            let stab_qualified = !stab_only || data::is_stab(&move_.1.type_, &attacker.data);
+            let stab_qualified = !stab_only || is_stab(&move_.1.type_, &attacker.data);
             let verbose_qualified = verbose || multiplier >= 2.0;
 
             if move_.1.damage_class != "status" && stab_qualified && verbose_qualified {
@@ -57,7 +58,7 @@ impl WeaknessDisplay<&Move> for DisplayComponent<MoveWeaknessComponent<'_>> {
                 "physical" => "p",
                 _ => "?",
             };
-            let color = if data::is_stab(&move_.type_, &self.context.attacker.data) {
+            let color = if is_stab(&move_.type_, &self.context.attacker.data) {
                 stab_color
             } else {
                 normal_color

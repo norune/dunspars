@@ -1,5 +1,6 @@
 use super::{Colors, DisplayComponent};
-use crate::data::{self, Move, MoveList, PokemonData};
+use crate::cli::utils::is_stab;
+use crate::models::{Move, MoveList, PokemonData};
 
 use std::fmt;
 
@@ -49,11 +50,7 @@ impl fmt::Display for DisplayComponent<MoveListComponent<'_>> {
                 ..
             } = move_list.get_map().get(name).unwrap();
 
-            let stab = if data::is_stab(type_, pokemon) {
-                "(s)"
-            } else {
-                ""
-            };
+            let stab = if is_stab(type_, pokemon) { "(s)" } else { "" };
 
             let power = if let Some(power) = power {
                 power.to_string()

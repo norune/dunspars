@@ -1,5 +1,5 @@
 use super::{Colors, DisplayComponent};
-use crate::data::Move;
+use crate::models::Move;
 
 use std::fmt;
 

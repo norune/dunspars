@@ -1,11 +1,11 @@
 ---
-source: src/data/api.rs
-expression: politoed
+source: src/api.rs
+expression: cascoon
 ---
-name: poliwag
+name: wurmple
 methods: []
 evolves_to:
-  - name: poliwhirl
+  - name: silcoon
     methods:
       - trigger: level-up
         item: ~
@@ -14,7 +14,7 @@ evolves_to:
         known_move: ~
         known_move_type: ~
         location: ~
-        min_level: 25
+        min_level: 7
         min_happiness: ~
         min_beauty: ~
         min_affection: ~
@@ -26,16 +26,16 @@ evolves_to:
         trade_species: ~
         turn_upside_down: ~
     evolves_to:
-      - name: poliwrath
+      - name: beautifly
         methods:
-          - trigger: use-item
-            item: water-stone
+          - trigger: level-up
+            item: ~
             gender: ~
             held_item: ~
             known_move: ~
             known_move_type: ~
             location: ~
-            min_level: ~
+            min_level: 10
             min_happiness: ~
             min_beauty: ~
             min_affection: ~
@@ -47,16 +47,37 @@ evolves_to:
             trade_species: ~
             turn_upside_down: ~
         evolves_to: []
-      - name: politoed
+  - name: cascoon
+    methods:
+      - trigger: level-up
+        item: ~
+        gender: ~
+        held_item: ~
+        known_move: ~
+        known_move_type: ~
+        location: ~
+        min_level: 7
+        min_happiness: ~
+        min_beauty: ~
+        min_affection: ~
+        needs_overworld_rain: ~
+        party_species: ~
+        party_type: ~
+        relative_physical_stats: ~
+        time_of_day: ~
+        trade_species: ~
+        turn_upside_down: ~
+    evolves_to:
+      - name: dustox
         methods:
-          - trigger: trade
+          - trigger: level-up
             item: ~
             gender: ~
-            held_item: kings-rock
+            held_item: ~
             known_move: ~
             known_move_type: ~
             location: ~
-            min_level: ~
+            min_level: 10
             min_happiness: ~
             min_beauty: ~
             min_affection: ~

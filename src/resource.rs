@@ -1,14 +1,15 @@
+use crate::api::utils::{self, capture_gen_url, get_all_game_data};
+use crate::api::{get_all_game_rows, get_all_move_rows};
+use crate::models::Game;
+
 use std::collections::HashMap;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Result};
-
+use rusqlite::{params, Connection, Result as SqlResult};
 use rustemon::client::RustemonClient;
-
-use crate::data::api::utils::{self, capture_gen_url, get_all_game_data};
-use crate::data::Game;
 
 pub enum ResourceResult {
     Valid,
@@ -240,14 +241,11 @@ fn app_directory(base_dir: AppDirectories, target_dir: &str) -> PathBuf {
 }
 
 pub trait File {
-    fn build_dir(file: &str) -> Result<PathBuf> {
-        let mut dir = Self::dir();
-
+    fn build_dir() -> Result<PathBuf> {
+        let dir = Self::dir();
         if !path_exists(&dir) {
             fs::create_dir_all(&dir)?;
         }
-        dir.push(file);
-
         Ok(dir)
     }
 
@@ -289,7 +287,8 @@ pub struct GameResourceFile {
 }
 impl GameResourceFile {
     pub fn try_new() -> Result<Self> {
-        let path = Self::build_dir("games.yaml")?;
+        let mut path = Self::build_dir()?;
+        path.push("games.yaml");
         Ok(Self { path })
     }
 }
@@ -313,5 +312,64 @@ fn path_exists(path: &Path) -> bool {
         exists
     } else {
         false
+    }
+}
+
+pub struct DatabaseBuilder {
+    path: PathBuf,
+    db: Connection,
+}
+impl DatabaseBuilder {
+    pub fn try_new() -> Result<Self> {
+        let mut path = Self::build_dir()?;
+        path.push("resource.db");
+
+        let db = Connection::open(&path)?;
+
+        Ok(Self { path, db })
+    }
+
+    pub async fn build_db(&self) -> Result<()> {
+        self.create_schema()?;
+        self.populate_games().await?;
+        self.populate_moves().await?;
+        Ok(())
+    }
+
+    fn create_schema(&self) -> SqlResult<()> {
+        self.db.execute_batch(include_str!("sql/create_schema.sql"))
+    }
+
+    async fn populate_games(&self) -> Result<()> {
+        let games = get_all_game_rows().await?;
+        let mut insert_game = self.db.prepare(include_str!("sql/game.sql"))?;
+        for game in games {
+            insert_game.execute(params![game.id, game.name, game.order, game.generation])?;
+        }
+        Ok(())
+    }
+
+    async fn populate_moves(&self) -> Result<()> {
+        let moves = get_all_move_rows().await?;
+        let mut insert_move = self.db.prepare(include_str!("sql/move.sql"))?;
+        for move_ in moves {
+            insert_move.execute(params![
+                move_.id,
+                move_.name,
+                move_.power,
+                move_.accuracy,
+                move_.pp
+            ])?;
+        }
+        Ok(())
+    }
+}
+impl File for DatabaseBuilder {
+    fn dir() -> PathBuf {
+        app_directory_data("")
+    }
+
+    fn get_path(&self) -> &PathBuf {
+        &self.path
     }
 }

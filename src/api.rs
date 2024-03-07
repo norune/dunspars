@@ -1,16 +1,23 @@
+mod convert;
+pub mod once;
 pub mod utils;
 
-use crate::data::once::{api_client, cache_manager, game_resource};
-use crate::data::resource::{GameResource, GetGeneration};
-use crate::data::{
+use crate::models::resource::{GameRow, MoveRow};
+use crate::models::{
     Ability, DefenseTypeChart, EvolutionStep, Move, OffenseTypeChart, PokemonData, PokemonGroup,
     Stats, Type, TypeChart,
 };
+use crate::resource::{GameResource, GetGeneration};
+use once::{api_client, cache_manager, game_resource};
+use utils::{get_all_games, get_all_moves};
 
 use std::collections::HashMap;
 
 use anyhow::{anyhow, bail, Result};
+use futures::stream::FuturesOrdered;
+use futures::StreamExt;
 use rustemon::client::RustemonClient;
+use rustemon::games::version_group as rustemon_version;
 use rustemon::moves::move_ as rustemon_moves;
 use rustemon::pokemon::pokemon_species as rustemon_species;
 use rustemon::pokemon::{
@@ -27,6 +34,42 @@ use rustemon::model::pokemon::{
     PokemonTypePast as RustemonPastPokemonType, Type as RustemonType,
 };
 use rustemon::model::resource::VerboseEffect as RustemonVerboseEffect;
+
+pub async fn get_all_game_rows() -> Result<Vec<GameRow>> {
+    let game_names = get_all_games(api_client()).await?;
+    let game_data_futures: FuturesOrdered<_> = game_names
+        .iter()
+        .map(|g| rustemon_version::get_by_name(g, api_client()))
+        .collect();
+    let game_results: Vec<_> = game_data_futures.collect().await;
+    let mut game_data = vec![];
+
+    for version_group in game_results {
+        let game = GameRow::from(version_group?);
+        game_data.push(game);
+    }
+
+    Ok(game_data)
+}
+
+pub async fn get_all_move_rows() -> Result<Vec<MoveRow>> {
+    let move_names = get_all_moves(api_client()).await?;
+    println!("retrieving moves");
+    let move_futures: FuturesOrdered<_> = move_names
+        .iter()
+        .map(|g| rustemon_moves::get_by_name(g, api_client()))
+        .collect();
+    let move_results: Vec<_> = move_futures.collect().await;
+    let mut move_data = vec![];
+    println!("moves retrieved");
+
+    for move_ in move_results {
+        let move_ = MoveRow::from(move_?);
+        move_data.push(move_);
+    }
+
+    Ok(move_data)
+}
 
 pub async fn get_type(type_name: &str, current_gen: u8) -> Result<Type> {
     rustemon_type(type_name, current_gen, api_client(), game_resource()).await

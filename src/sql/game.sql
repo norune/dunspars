@@ -1,0 +1,1 @@
+INSERT INTO games ([id], [name], [order], [generation]) VALUES (?1, ?2, ?3, ?4);

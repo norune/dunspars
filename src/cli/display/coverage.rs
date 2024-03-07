@@ -1,5 +1,5 @@
 use super::{Colors, DisplayComponent};
-use crate::data::{Pokemon, PokemonData, Type, TypeChart, TypeCharts, TYPES};
+use crate::models::{Pokemon, PokemonData, Type, TypeChart, TypeCharts, TYPES};
 
 use std::collections::{hash_map::Entry, HashMap};
 use std::fmt;

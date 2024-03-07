@@ -1,5 +1,5 @@
 use super::{Colors, DisplayComponent};
-use crate::data::Stats;
+use crate::models::Stats;
 
 use std::fmt;
 

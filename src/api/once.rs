@@ -1,4 +1,4 @@
-use crate::data::resource::{app_directory_cache, GameResource};
+use crate::resource::{app_directory_cache, GameResource};
 
 use std::sync::OnceLock;
 
