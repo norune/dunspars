@@ -2,10 +2,10 @@ mod convert;
 pub mod once;
 pub mod utils;
 
-use crate::models::resource::{ChangeMoveValueRow, FromGen, GameRow, MoveRow};
+use crate::models::resource::{ChangeMoveValueRow, GameRow, MoveRow};
 use crate::models::{
-    Ability, DefenseTypeChart, EvolutionStep, Move, OffenseTypeChart, PokemonData, PokemonGroup,
-    Stats, Type, TypeChart,
+    Ability, DefenseTypeChart, EvolutionStep, OffenseTypeChart, PokemonData, PokemonGroup, Stats,
+    Type, TypeChart,
 };
 use crate::resource::{GameResource, GetGeneration};
 use convert::FromChange;
@@ -28,7 +28,6 @@ use rustemon::pokemon::{
 use rustemon::Follow;
 
 use rustemon::model::evolution::EvolutionChain as RustemonEvoRoot;
-use rustemon::model::moves::Move as RustemonMove;
 use rustemon::model::pokemon::{
     Ability as RustemonAbility, Pokemon as RustemonPokemon,
     PokemonAbility as RustemonPokemonAbility, PokemonMove as RustemonPokemonMove,
@@ -80,11 +79,6 @@ pub async fn get_all_move_rows(db: &Connection) -> Result<(Vec<MoveRow>, Vec<Cha
     Ok((move_data, change_move_data))
 }
 
-pub async fn get_move_db(move_name: &str, current_gen: u8, db: &Connection) -> Result<Move> {
-    let move_row = MoveRow::from_name(move_name, db)?;
-    Move::from_gen(move_row, current_gen, db)
-}
-
 pub async fn get_type(type_name: &str, current_gen: u8) -> Result<Type> {
     rustemon_type(type_name, current_gen, api_client(), game_resource()).await
 }
@@ -120,79 +114,6 @@ async fn rustemon_type(
         name,
         offense_chart,
         defense_chart,
-        generation: current_gen,
-    })
-}
-
-pub async fn get_move(move_name: &str, current_gen: u8) -> Result<Move> {
-    rustemon_move(move_name, current_gen, api_client(), game_resource()).await
-}
-async fn rustemon_move(
-    move_name: &str,
-    current_gen: u8,
-    client: &RustemonClient,
-    game_resource: &GameResource,
-) -> Result<Move> {
-    let RustemonMove {
-        name,
-        mut accuracy,
-        mut power,
-        mut pp,
-        damage_class,
-        mut type_,
-        mut effect_chance,
-        effect_entries,
-        effect_changes,
-        past_values,
-        generation,
-        ..
-    } = rustemon_moves::get_by_name(move_name, client).await?;
-
-    if current_gen < game_resource.get_gen_from_url(&generation.url) {
-        bail!(format!(
-            "Move '{move_name}' is not present in generation {current_gen}"
-        ))
-    }
-
-    let RustemonVerboseEffect { mut effect, .. } = effect_entries
-        .into_iter()
-        .find(|e| e.language.name == "en")
-        .unwrap_or_default();
-
-    if let Some(past_stats) = utils::match_past(current_gen, &past_values, game_resource) {
-        accuracy = past_stats.accuracy.or(accuracy);
-        power = past_stats.power.or(power);
-        pp = past_stats.pp.or(pp);
-        effect_chance = past_stats.effect_chance.or(effect_chance);
-
-        if let Some(t) = past_stats.type_ {
-            type_ = t;
-        }
-
-        if let Some(entry) = past_stats
-            .effect_entries
-            .into_iter()
-            .find(|e| e.language.name == "en")
-        {
-            effect = entry.effect;
-        }
-    }
-
-    if let Some(past_effects) = utils::match_past(current_gen, &effect_changes, game_resource) {
-        if let Some(past_effect) = past_effects.into_iter().find(|e| e.language.name == "en") {
-            effect += format!("\n\nGeneration {current_gen}: {}", past_effect.effect).as_str();
-        }
-    }
-
-    Ok(Move {
-        name,
-        accuracy,
-        power,
-        pp,
-        damage_class: damage_class.name,
-        type_: type_.name,
-        effect_chance,
-        effect,
         generation: current_gen,
     })
 }
@@ -407,28 +328,6 @@ mod tests {
         let bug_gen_2 = get_type("bug", 2).await.unwrap();
         assert_eq!(0.5, bug_gen_2.offense_chart.get_multiplier("poison"));
         assert_eq!(2.0, bug_gen_2.offense_chart.get_multiplier("dark"));
-    }
-
-    #[tokio::test]
-    async fn get_move_test() {
-        // Earth Power was not introduced until gen 4
-        get_move("earth-power", 3).await.unwrap_err();
-        get_move("earth-power", 4).await.unwrap();
-
-        // Tackle gen 1-4 power: 35 accuracy: 95
-        let tackle_gen_4 = get_move("tackle", 4).await.unwrap();
-        assert_eq!(35, tackle_gen_4.power.unwrap());
-        assert_eq!(95, tackle_gen_4.accuracy.unwrap());
-
-        // Tackle gen 5-6 power: 50 accuracy: 100
-        let tackle_gen_5 = get_move("tackle", 5).await.unwrap();
-        assert_eq!(50, tackle_gen_5.power.unwrap());
-        assert_eq!(100, tackle_gen_5.accuracy.unwrap());
-
-        // Tackle gen >=7 power: 40 accuracy: 100
-        let tackle_gen_9 = get_move("tackle", 9).await.unwrap();
-        assert_eq!(40, tackle_gen_9.power.unwrap());
-        assert_eq!(100, tackle_gen_9.accuracy.unwrap());
     }
 
     #[tokio::test]

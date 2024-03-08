@@ -5,8 +5,8 @@ use crate::api;
 use crate::api::once::{api_client, game_resource};
 use crate::models::{Ability, Move, Pokemon, PokemonData, Type};
 use crate::resource::{
-    AbilityResource, DatabaseBuilder, GameResourceFile, GetGeneration, MoveResource,
-    PokemonResource, Resource, ResourceFile, TypeResource,
+    AbilityResource, DatabaseFile, GameResourceFile, GetGeneration, MoveResource, PokemonResource,
+    Resource, ResourceFile, TypeResource,
 };
 use display::*;
 
@@ -119,6 +119,7 @@ pub async fn run() -> Result<()> {
 
     let game_resource_file = GameResourceFile::try_new()?;
     game_resource_file.build_if_missing(false).await?;
+    let db_file = DatabaseFile::try_new(false)?;
 
     let mut config_builder = ConfigBuilder::new();
     if let Some(game) = cli.game {
@@ -132,7 +133,7 @@ pub async fn run() -> Result<()> {
     }
     let config = config_builder.build()?;
 
-    let program = Program::new(config);
+    let program = Program::new(config, db_file);
 
     match cli.command {
         Commands::Setup => program.run_setup().await?,
@@ -220,11 +221,12 @@ struct Config {
 
 struct Program {
     config: Config,
+    db_file: DatabaseFile,
 }
 
 impl Program {
-    pub fn new(config: Config) -> Self {
-        Self { config }
+    pub fn new(config: Config, db_file: DatabaseFile) -> Self {
+        Self { config, db_file }
     }
 
     async fn run_pokemon(&self, name: String, moves: bool, evolution: bool) -> Result<String> {
@@ -263,7 +265,7 @@ impl Program {
         }
 
         if moves {
-            let moves = pokemon.get_moves().await?;
+            let moves = pokemon.get_moves(&self.db_file.db)?;
             let move_list_context = MoveListComponent {
                 move_list: &moves,
                 pokemon: &pokemon,
@@ -327,7 +329,7 @@ impl Program {
 
         let attacker_name = resource.validate(&attacker_name)?;
         let attacker_data = PokemonData::from_name(&attacker_name, &self.config.game).await?;
-        let attacker_moves = attacker_data.get_moves().await?;
+        let attacker_moves = attacker_data.get_moves(&self.db_file.db)?;
         let attacker_chart = attacker_data.get_defense_chart().await?;
         let attacker = Pokemon::new(attacker_data, attacker_chart, attacker_moves);
 
@@ -336,7 +338,7 @@ impl Program {
         for defender_name in defender_names {
             let defender_name = resource.validate(&defender_name)?;
             let defender_data = PokemonData::from_name(&defender_name, &self.config.game).await?;
-            let defender_moves = defender_data.get_moves().await?;
+            let defender_moves = defender_data.get_moves(&self.db_file.db)?;
             let defender_chart = defender_data.get_defense_chart().await?;
             let defender = Pokemon::new(defender_data, defender_chart, defender_moves);
 
@@ -373,7 +375,7 @@ impl Program {
         for name in names {
             let name = resource.validate(&name)?;
             let data = PokemonData::from_name(&name, &self.config.game).await?;
-            let moves = data.get_moves().await?;
+            let moves = data.get_moves(&self.db_file.db)?;
             let chart = data.get_defense_chart().await?;
 
             let mon = Pokemon::new(data, chart, moves);
@@ -394,7 +396,7 @@ impl Program {
         let resource = MoveResource::try_new(api_client()).await?;
         let move_name = resource.validate(&name)?;
 
-        let move_ = Move::from_name(&move_name, self.config.generation).await?;
+        let move_ = Move::from_name(&move_name, self.config.generation, &self.db_file.db)?;
         let move_display = DisplayComponent::new(&move_, self.config.color_enabled);
 
         let output = formatdoc! {
@@ -465,7 +467,7 @@ impl Program {
     }
 
     async fn run_setup(&self) -> Result<()> {
-        let db = DatabaseBuilder::try_new()?;
+        let db = DatabaseFile::try_new(true)?;
         db.build_db().await
     }
 }
@@ -480,7 +482,8 @@ mod tests {
             .color_enabled(false)
             .build()
             .unwrap();
-        Program::new(config)
+        let db_file = DatabaseFile::try_new(false).unwrap();
+        Program::new(config, db_file)
     }
 
     #[tokio::test]

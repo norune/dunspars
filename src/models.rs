@@ -1,13 +1,13 @@
 pub mod resource;
 
 use crate::api;
+use resource::{ChangeMoveValueRow, FromRow, GameRow, MoveRow, SelectChangeRow, SelectRow};
 
 use std::collections::HashMap;
 use std::ops::Add;
 
-use anyhow::Result;
-use futures::stream::FuturesUnordered;
-use futures::StreamExt;
+use anyhow::{bail, Result};
+use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 
 pub struct Pokemon {
@@ -45,17 +45,16 @@ impl PokemonData {
         api::get_pokemon(name, game).await
     }
 
-    pub async fn get_moves(&self) -> Result<MoveList> {
-        let moves_futures: FuturesUnordered<_> = self
+    pub fn get_moves(&self, db: &Connection) -> Result<MoveList> {
+        let moves_results = self
             .learn_moves
             .iter()
-            .map(|mv| Move::from_name(mv.0, self.generation))
-            .collect();
-        let moves_results: Vec<_> = moves_futures.collect().await;
+            .map(|mv| Move::from_name(mv.0, self.generation, db))
+            .collect::<Vec<Result<Move>>>();
 
         let mut moves = HashMap::new();
-        for result in moves_results {
-            let move_ = result?;
+        for move_ in moves_results {
+            let move_ = move_?;
             moves.insert(move_.name.clone(), move_);
         }
 
@@ -254,10 +253,56 @@ pub struct Move {
     pub effect_chance: Option<i64>,
     pub generation: u8,
 }
-
 impl Move {
-    pub async fn from_name(move_name: &str, generation: u8) -> Result<Self> {
-        api::get_move(move_name, generation).await
+    pub fn from_name(move_name: &str, generation: u8, db: &Connection) -> Result<Self> {
+        let move_row = MoveRow::select_by_name(move_name, db)?;
+        Move::from_row(move_row, generation, db)
+    }
+}
+impl FromRow<MoveRow> for Move {
+    fn from_row(value: MoveRow, current_gen: u8, db: &Connection) -> Result<Self> {
+        let MoveRow {
+            id,
+            name,
+            mut power,
+            mut accuracy,
+            mut pp,
+            mut effect_chance,
+            effect,
+            mut type_,
+            damage_class,
+            generation,
+        } = value;
+
+        if current_gen < generation {
+            bail!(format!(
+                "Move '{name}' is not present in generation {current_gen}"
+            ));
+        }
+
+        let change_row = ChangeMoveValueRow::select_by_fk(id, current_gen, db)?;
+        if let Some(change) = change_row {
+            power = change.power.or(power);
+            accuracy = change.accuracy.or(accuracy);
+            pp = change.pp.or(pp);
+            effect_chance = change.effect_chance.or(effect_chance);
+
+            if let Some(t) = change.type_ {
+                type_ = t;
+            }
+        }
+
+        Ok(Move {
+            name,
+            accuracy,
+            power,
+            pp,
+            damage_class,
+            type_,
+            effect,
+            effect_chance,
+            generation,
+        })
     }
 }
 
@@ -448,7 +493,6 @@ pub struct Game {
     pub order: u8,
     pub generation: u8,
 }
-
 impl Game {
     pub fn new(name: String, order: u8, generation: u8) -> Self {
         Self {
@@ -458,10 +502,46 @@ impl Game {
         }
     }
 }
+impl From<GameRow> for Game {
+    fn from(row: GameRow) -> Self {
+        let GameRow {
+            name,
+            order,
+            generation,
+            ..
+        } = row;
+        Game::new(name, order, generation)
+    }
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::resource::DatabaseFile;
+
+    #[test]
+    fn get_move_by_name() {
+        let DatabaseFile { ref db, .. } = DatabaseFile::try_new(false).unwrap();
+
+        // Earth Power was not introduced until gen 4
+        Move::from_name("earth-power", 3, db).unwrap_err();
+        Move::from_name("earth-power", 4, db).unwrap();
+
+        // Tackle gen 1-4 power: 35 accuracy: 95
+        let tackle_gen_4 = Move::from_name("tackle", 4, db).unwrap();
+        assert_eq!(35, tackle_gen_4.power.unwrap());
+        assert_eq!(95, tackle_gen_4.accuracy.unwrap());
+
+        // Tackle gen 5-6 power: 50 accuracy: 100
+        let tackle_gen_5 = Move::from_name("tackle", 5, db).unwrap();
+        assert_eq!(50, tackle_gen_5.power.unwrap());
+        assert_eq!(100, tackle_gen_5.accuracy.unwrap());
+
+        // Tackle gen >=7 power: 40 accuracy: 100
+        let tackle_gen_7 = Move::from_name("tackle", 7, db).unwrap();
+        assert_eq!(40, tackle_gen_7.power.unwrap());
+        assert_eq!(100, tackle_gen_7.accuracy.unwrap());
+    }
 
     #[test]
     fn combine_charts_test() {

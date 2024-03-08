@@ -1,5 +1,5 @@
 use crate::api::utils::capture_gen_url;
-use crate::models::resource::{ChangeMoveValueRow, GameRow, MoveRow};
+use crate::models::resource::{ChangeMoveValueRow, GameRow, MoveRow, SelectRow};
 use rusqlite::Connection;
 use rustemon::model::games::VersionGroup;
 use rustemon::model::moves::{Move, PastMoveStatValues};
@@ -7,8 +7,8 @@ use rustemon::model::resource::VerboseEffect;
 
 pub trait FromChange<T> {
     fn game_to_gen(game: &str, db: &Connection) -> u8 {
-        let query = "SELECT generation FROM games WHERE name = ?1";
-        db.query_row(query, [game], |row| row.get(0)).unwrap()
+        let game = GameRow::select_by_name(game, db).unwrap();
+        game.generation
     }
     fn from_change(value: T, id: i64, db: &Connection) -> Self;
 }
@@ -92,7 +92,7 @@ impl FromChange<&PastMoveStatValues> for ChangeMoveValueRow {
 
         let effect = effect_entries.get_effect();
         let type_ = type_.clone().map(|t| t.name);
-        let generation = Self::game_to_gen(&version_group.name, db) - 1;
+        let generation = Self::game_to_gen(&version_group.name, db);
 
         Self {
             id: None,

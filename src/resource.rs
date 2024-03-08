@@ -1,6 +1,6 @@
 use crate::api::utils::{self, capture_gen_url, get_all_game_data};
 use crate::api::{get_all_game_rows, get_all_move_rows};
-use crate::models::resource::{ChangeMoveValueRow, GameRow, MoveRow, Row};
+use crate::models::resource::{ChangeMoveValueRow, GameRow, InsertRow, MoveRow};
 use crate::models::Game;
 
 use std::collections::HashMap;
@@ -316,14 +316,18 @@ fn path_exists(path: &Path) -> bool {
     }
 }
 
-pub struct DatabaseBuilder {
+pub struct DatabaseFile {
     path: PathBuf,
-    db: Connection,
+    pub db: Connection,
 }
-impl DatabaseBuilder {
-    pub fn try_new() -> Result<Self> {
+impl DatabaseFile {
+    pub fn try_new(overwrite: bool) -> Result<Self> {
         let mut path = Self::build_dir()?;
         path.push("resource.db");
+
+        if overwrite && path_exists(&path) {
+            fs::remove_file(&path)?;
+        }
 
         let db = Connection::open(&path)?;
 
@@ -366,7 +370,7 @@ impl DatabaseBuilder {
         Ok(())
     }
 }
-impl File for DatabaseBuilder {
+impl File for DatabaseFile {
     fn dir() -> PathBuf {
         app_directory_data("")
     }
