@@ -2,12 +2,13 @@ mod convert;
 pub mod once;
 pub mod utils;
 
-use crate::models::resource::{GameRow, MoveRow};
+use crate::models::resource::{ChangeMoveValueRow, FromGen, GameRow, MoveRow};
 use crate::models::{
     Ability, DefenseTypeChart, EvolutionStep, Move, OffenseTypeChart, PokemonData, PokemonGroup,
     Stats, Type, TypeChart,
 };
 use crate::resource::{GameResource, GetGeneration};
+use convert::FromChange;
 use once::{api_client, cache_manager, game_resource};
 use utils::{get_all_games, get_all_moves};
 
@@ -16,6 +17,7 @@ use std::collections::HashMap;
 use anyhow::{anyhow, bail, Result};
 use futures::stream::FuturesOrdered;
 use futures::StreamExt;
+use rusqlite::Connection;
 use rustemon::client::RustemonClient;
 use rustemon::games::version_group as rustemon_version;
 use rustemon::moves::move_ as rustemon_moves;
@@ -52,7 +54,7 @@ pub async fn get_all_game_rows() -> Result<Vec<GameRow>> {
     Ok(game_data)
 }
 
-pub async fn get_all_move_rows() -> Result<Vec<MoveRow>> {
+pub async fn get_all_move_rows(db: &Connection) -> Result<(Vec<MoveRow>, Vec<ChangeMoveValueRow>)> {
     let move_names = get_all_moves(api_client()).await?;
     println!("retrieving moves");
     let move_futures: FuturesOrdered<_> = move_names
@@ -61,14 +63,26 @@ pub async fn get_all_move_rows() -> Result<Vec<MoveRow>> {
         .collect();
     let move_results: Vec<_> = move_futures.collect().await;
     let mut move_data = vec![];
+    let mut change_move_data = vec![];
     println!("moves retrieved");
 
     for move_ in move_results {
-        let move_ = MoveRow::from(move_?);
+        let move_ = move_?;
+        for past_value in move_.past_values.iter() {
+            let change_move = ChangeMoveValueRow::from_change(past_value, move_.id, db);
+            change_move_data.push(change_move);
+        }
+
+        let move_ = MoveRow::from(move_);
         move_data.push(move_);
     }
 
-    Ok(move_data)
+    Ok((move_data, change_move_data))
+}
+
+pub async fn get_move_db(move_name: &str, current_gen: u8, db: &Connection) -> Result<Move> {
+    let move_row = MoveRow::from_name(move_name, db)?;
+    Move::from_gen(move_row, current_gen, db)
 }
 
 pub async fn get_type(type_name: &str, current_gen: u8) -> Result<Type> {
@@ -140,11 +154,7 @@ async fn rustemon_move(
         ))
     }
 
-    let RustemonVerboseEffect {
-        mut effect,
-        mut short_effect,
-        ..
-    } = effect_entries
+    let RustemonVerboseEffect { mut effect, .. } = effect_entries
         .into_iter()
         .find(|e| e.language.name == "en")
         .unwrap_or_default();
@@ -165,7 +175,6 @@ async fn rustemon_move(
             .find(|e| e.language.name == "en")
         {
             effect = entry.effect;
-            short_effect = entry.short_effect;
         }
     }
 
@@ -184,7 +193,6 @@ async fn rustemon_move(
         type_: type_.name,
         effect_chance,
         effect,
-        short_effect,
         generation: current_gen,
     })
 }

@@ -1,5 +1,6 @@
 use crate::api::utils::{self, capture_gen_url, get_all_game_data};
 use crate::api::{get_all_game_rows, get_all_move_rows};
+use crate::models::resource::{ChangeMoveValueRow, GameRow, MoveRow, Row};
 use crate::models::Game;
 
 use std::collections::HashMap;
@@ -8,7 +9,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Result};
-use rusqlite::{params, Connection, Result as SqlResult};
+use rusqlite::{Connection, Result as SqlResult};
 use rustemon::client::RustemonClient;
 
 pub enum ResourceResult {
@@ -342,25 +343,26 @@ impl DatabaseBuilder {
 
     async fn populate_games(&self) -> Result<()> {
         let games = get_all_game_rows().await?;
-        let mut insert_game = self.db.prepare(include_str!("sql/game.sql"))?;
+        let mut statement = GameRow::insert_stmt(&self.db)?;
         for game in games {
-            insert_game.execute(params![game.id, game.name, game.order, game.generation])?;
+            game.insert(&mut statement)?;
         }
         Ok(())
     }
 
     async fn populate_moves(&self) -> Result<()> {
-        let moves = get_all_move_rows().await?;
-        let mut insert_move = self.db.prepare(include_str!("sql/move.sql"))?;
+        let (moves, move_changes) = get_all_move_rows(&self.db).await?;
+
+        let mut insert_move = MoveRow::insert_stmt(&self.db)?;
         for move_ in moves {
-            insert_move.execute(params![
-                move_.id,
-                move_.name,
-                move_.power,
-                move_.accuracy,
-                move_.pp
-            ])?;
+            move_.insert(&mut insert_move)?;
         }
+
+        let mut insert_move_changes = ChangeMoveValueRow::insert_stmt(&self.db)?;
+        for change in move_changes {
+            change.insert(&mut insert_move_changes)?;
+        }
+
         Ok(())
     }
 }

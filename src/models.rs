@@ -251,7 +251,6 @@ pub struct Move {
     pub damage_class: String,
     pub type_: String,
     pub effect: String,
-    pub short_effect: String,
     pub effect_chance: Option<i64>,
     pub generation: u8,
 }
