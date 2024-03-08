@@ -2,12 +2,14 @@ mod convert;
 pub mod once;
 pub mod utils;
 
-use crate::models::resource::{GameRow, MoveChangeRow, MoveRow, TypeChangeRow, TypeRow};
-use crate::models::{Ability, EvolutionStep, PokemonData, PokemonGroup, Stats};
+use crate::models::resource::{
+    AbilityRow, GameRow, MoveChangeRow, MoveRow, TypeChangeRow, TypeRow,
+};
+use crate::models::{EvolutionStep, PokemonData, PokemonGroup, Stats};
 use crate::resource::{GameResource, GetGeneration};
 use convert::FromChange;
 use once::{api_client, cache_manager, game_resource};
-use utils::{get_all_games, get_all_moves, get_all_types};
+use utils::{get_all_abilities, get_all_games, get_all_moves, get_all_types};
 
 use std::collections::HashMap;
 
@@ -26,12 +28,10 @@ use rustemon::Follow;
 
 use rustemon::model::evolution::EvolutionChain as RustemonEvoRoot;
 use rustemon::model::pokemon::{
-    Ability as RustemonAbility, Pokemon as RustemonPokemon,
-    PokemonAbility as RustemonPokemonAbility, PokemonMove as RustemonPokemonMove,
-    PokemonSpecies as RustemonSpecies, PokemonType as RustemonTypeSlot,
-    PokemonTypePast as RustemonPastPokemonType,
+    Pokemon as RustemonPokemon, PokemonAbility as RustemonPokemonAbility,
+    PokemonMove as RustemonPokemonMove, PokemonSpecies as RustemonSpecies,
+    PokemonType as RustemonTypeSlot, PokemonTypePast as RustemonPastPokemonType,
 };
-use rustemon::model::resource::VerboseEffect as RustemonVerboseEffect;
 
 pub async fn get_all_game_rows(client: &RustemonClient) -> Result<Vec<GameRow>> {
     let game_names = get_all_games(client).await?;
@@ -104,50 +104,21 @@ pub async fn get_all_type_rows(
     Ok((type_data, change_type_data))
 }
 
-pub async fn get_ability(ability_name: &str, current_gen: u8) -> Result<Ability> {
-    rustemon_ability(ability_name, current_gen, api_client(), game_resource()).await
-}
-async fn rustemon_ability(
-    ability_name: &str,
-    current_gen: u8,
-    client: &RustemonClient,
-    game_resource: &GameResource,
-) -> Result<Ability> {
-    let RustemonAbility {
-        name,
-        effect_entries,
-        effect_changes,
-        generation,
-        ..
-    } = rustemon_ability::get_by_name(ability_name, client).await?;
+pub async fn get_all_ability_rows(client: &RustemonClient) -> Result<Vec<AbilityRow>> {
+    let ability_names = get_all_abilities(client).await?;
+    let ability_futures: FuturesOrdered<_> = ability_names
+        .iter()
+        .map(|g| rustemon_ability::get_by_name(g, client))
+        .collect();
+    let ability_results: Vec<_> = ability_futures.collect().await;
+    let mut ability_data = vec![];
 
-    if current_gen < game_resource.get_gen_from_url(&generation.url) {
-        bail!(format!(
-            "Ability '{ability_name}' is not present in generation {current_gen}"
-        ))
+    for ability in ability_results {
+        let ability = AbilityRow::from(ability?);
+        ability_data.push(ability);
     }
 
-    let RustemonVerboseEffect {
-        mut effect,
-        short_effect,
-        ..
-    } = effect_entries
-        .into_iter()
-        .find(|e| e.language.name == "en")
-        .unwrap_or_default();
-
-    if let Some(past_effects) = utils::match_past(current_gen, &effect_changes, game_resource) {
-        if let Some(past_effect) = past_effects.into_iter().find(|e| e.language.name == "en") {
-            effect += format!("\n\nGeneration {current_gen}: {}", past_effect.effect).as_str();
-        }
-    }
-
-    Ok(Ability {
-        name,
-        effect,
-        short_effect,
-        generation: current_gen,
-    })
+    Ok(ability_data)
 }
 
 pub async fn get_evolution(species: &str) -> Result<EvolutionStep> {
@@ -300,13 +271,6 @@ mod tests {
     use super::*;
     use crate::models::TypeChart;
     use crate::resource::DatabaseFile;
-
-    #[tokio::test]
-    async fn get_ability_test() {
-        // Beads of Ruin was not introduced until gen 9
-        get_ability("beads-of-ruin", 8).await.unwrap_err();
-        get_ability("beads-of-ruin", 9).await.unwrap();
-    }
 
     #[tokio::test]
     async fn get_pokemon_test() {

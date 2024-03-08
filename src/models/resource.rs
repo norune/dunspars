@@ -286,3 +286,34 @@ impl InsertRow for TypeChangeRow {
         ])
     }
 }
+
+pub struct AbilityRow {
+    pub id: i64,
+    pub name: String,
+    pub effect: String,
+    pub generation: u8,
+}
+impl TableRow for AbilityRow {
+    fn table() -> &'static str {
+        "abilities"
+    }
+}
+impl SelectRow for AbilityRow {
+    fn on_hit(row: &Row<'_>) -> SqlResult<Self> {
+        Ok(Self {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            effect: row.get(2)?,
+            generation: row.get(3)?,
+        })
+    }
+}
+impl InsertRow for AbilityRow {
+    fn query() -> &'static str {
+        include_str!("../sql/insert_ability.sql")
+    }
+
+    fn insert(&self, statement: &mut Statement) -> SqlResult<usize> {
+        statement.execute(params![self.id, self.name, self.effect, self.generation])
+    }
+}

@@ -415,7 +415,7 @@ impl Program {
         let resource = AbilityResource::try_new(api_client()).await?;
         let ability_name = resource.validate(&name)?;
 
-        let ability = Ability::from_name(&ability_name, self.config.generation).await?;
+        let ability = Ability::from_name(&ability_name, self.config.generation, &self.db_file.db)?;
         let ability_display = DisplayComponent::new(&ability, self.config.color_enabled);
 
         let output = formatdoc! {

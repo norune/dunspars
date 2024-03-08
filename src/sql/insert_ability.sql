@@ -1,0 +1,1 @@
+INSERT INTO abilities ([id], [name], [effect], [generation]) VALUES (?1, ?2, ?3, ?4);

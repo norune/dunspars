@@ -1,7 +1,9 @@
 use crate::api::once::api_client;
 use crate::api::utils::{self, capture_gen_url, get_all_game_data};
-use crate::api::{get_all_game_rows, get_all_move_rows, get_all_type_rows};
-use crate::models::resource::{GameRow, InsertRow, MoveChangeRow, MoveRow, TypeChangeRow, TypeRow};
+use crate::api::{get_all_ability_rows, get_all_game_rows, get_all_move_rows, get_all_type_rows};
+use crate::models::resource::{
+    AbilityRow, GameRow, InsertRow, MoveChangeRow, MoveRow, TypeChangeRow, TypeRow,
+};
 use crate::models::Game;
 
 use std::collections::HashMap;
@@ -345,6 +347,10 @@ impl DatabaseFile {
 
         println!("retrieving types");
         self.populate_types().await?;
+
+        println!("retrieving abilities");
+        self.populate_abilities().await?;
+
         Ok(())
     }
 
@@ -390,6 +396,15 @@ impl DatabaseFile {
             change.insert(&mut insert_type_changes)?;
         }
 
+        Ok(())
+    }
+
+    async fn populate_abilities(&self) -> Result<()> {
+        let abilities = get_all_ability_rows(api_client()).await?;
+        let mut statement = AbilityRow::insert_stmt(&self.db)?;
+        for ability in abilities {
+            ability.insert(&mut statement)?;
+        }
         Ok(())
     }
 }

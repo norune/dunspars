@@ -2,7 +2,8 @@ pub mod resource;
 
 use crate::api;
 use resource::{
-    FromRow, GameRow, MoveChangeRow, MoveRow, SelectChangeRow, SelectRow, TypeChangeRow, TypeRow,
+    AbilityRow, FromRow, GameRow, MoveChangeRow, MoveRow, SelectChangeRow, SelectRow,
+    TypeChangeRow, TypeRow,
 };
 
 use std::collections::HashMap;
@@ -373,7 +374,7 @@ impl FromRow<MoveRow> for Move {
             }
         }
 
-        Ok(Move {
+        Ok(Self {
             name,
             accuracy,
             power,
@@ -405,13 +406,34 @@ impl MoveList {
 pub struct Ability {
     pub name: String,
     pub effect: String,
-    pub short_effect: String,
     pub generation: u8,
 }
-
 impl Ability {
-    pub async fn from_name(name: &str, generation: u8) -> Result<Self> {
-        api::get_ability(name, generation).await
+    pub fn from_name(ability_name: &str, generation: u8, db: &Connection) -> Result<Self> {
+        let ability_row = AbilityRow::select_by_name(ability_name, db)?;
+        Ability::from_row(ability_row, generation, db)
+    }
+}
+impl FromRow<AbilityRow> for Ability {
+    fn from_row(value: AbilityRow, current_gen: u8, _db: &Connection) -> Result<Self> {
+        let AbilityRow {
+            name,
+            effect,
+            generation,
+            ..
+        } = value;
+
+        if current_gen < generation {
+            bail!(format!(
+                "Ability '{name}' is not present in generation {current_gen}"
+            ));
+        }
+
+        Ok(Self {
+            name,
+            effect,
+            generation,
+        })
     }
 }
 
@@ -641,6 +663,15 @@ mod tests {
         let tackle_gen_7 = Move::from_name("tackle", 7, db).unwrap();
         assert_eq!(40, tackle_gen_7.power.unwrap());
         assert_eq!(100, tackle_gen_7.accuracy.unwrap());
+    }
+
+    #[test]
+    fn get_ability_by_name() {
+        let DatabaseFile { ref db, .. } = DatabaseFile::try_new(false).unwrap();
+
+        // Beads of Ruin was not introduced until gen 9
+        Ability::from_name("beads-of-ruin", 8, db).unwrap_err();
+        Ability::from_name("beads-of-ruin", 9, db).unwrap();
     }
 
     #[test]

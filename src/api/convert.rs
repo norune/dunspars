@@ -1,10 +1,12 @@
 use crate::api::utils::capture_gen_url;
-use crate::models::resource::{GameRow, MoveChangeRow, MoveRow, SelectRow, TypeChangeRow, TypeRow};
+use crate::models::resource::{
+    AbilityRow, GameRow, MoveChangeRow, MoveRow, SelectRow, TypeChangeRow, TypeRow,
+};
 
 use rusqlite::Connection;
 use rustemon::model::games::VersionGroup;
 use rustemon::model::moves::{Move, PastMoveStatValues};
-use rustemon::model::pokemon::{Type, TypeRelations, TypeRelationsPast};
+use rustemon::model::pokemon::{Ability, Type, TypeRelations, TypeRelationsPast};
 use rustemon::model::resource::{NamedApiResource, VerboseEffect};
 
 trait GetEffectEntry {
@@ -30,7 +32,7 @@ impl From<VersionGroup> for GameRow {
         } = value;
         let generation = capture_gen_url(&generation.url).unwrap();
 
-        GameRow {
+        Self {
             id,
             name,
             order: order as u8,
@@ -57,7 +59,7 @@ impl From<Move> for MoveRow {
 
         let effect = effect_entries.get_effect().unwrap_or_default();
 
-        MoveRow {
+        Self {
             id,
             name,
             accuracy,
@@ -189,6 +191,27 @@ impl FromChange<&TypeRelationsPast> for TypeChangeRow {
             double_damage_from: double_damage_from.get_types(),
             generation,
             type_id: id,
+        }
+    }
+}
+
+impl From<Ability> for AbilityRow {
+    fn from(value: Ability) -> Self {
+        let Ability {
+            id,
+            name,
+            generation,
+            effect_entries,
+            ..
+        } = value;
+        let generation = capture_gen_url(&generation.url).unwrap();
+        let effect = effect_entries.get_effect().unwrap_or_default();
+
+        Self {
+            id,
+            name,
+            effect,
+            generation,
         }
     }
 }

@@ -40,7 +40,7 @@ CREATE TABLE types (
     [no_damage_from] TEXT,
     [half_damage_from] TEXT,
     [double_damage_from] TEXT,
-    [generation] u8 NOT NULL
+    [generation] INTEGER NOT NULL
 );
 
 CREATE TABLE type_changes (
@@ -51,7 +51,14 @@ CREATE TABLE type_changes (
     [no_damage_from] TEXT,
     [half_damage_from] TEXT,
     [double_damage_from] TEXT,
-    [generation] u8 NOT NULL,
+    [generation] INTEGER NOT NULL,
     [type_id] INTEGER NOT NULL,
     FOREIGN KEY([type_id]) REFERENCES types([id])
+);
+
+CREATE TABLE abilities (
+    [id] INTEGER PRIMARY KEY,
+    [name] TEXT NOT NULL,
+    [effect] TEXT NOT NULL,
+    [generation] ITNEGER NOT NULL
 );
