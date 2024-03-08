@@ -1,7 +1,9 @@
 pub mod resource;
 
 use crate::api;
-use resource::{FromRow, GameRow, MoveChangeRow, MoveRow, SelectChangeRow, SelectRow};
+use resource::{
+    FromRow, GameRow, MoveChangeRow, MoveRow, SelectChangeRow, SelectRow, TypeChangeRow, TypeRow,
+};
 
 use std::collections::HashMap;
 use std::ops::Add;
@@ -61,11 +63,11 @@ impl PokemonData {
         Ok(MoveList::new(moves))
     }
 
-    pub async fn get_defense_chart(&self) -> Result<DefenseTypeChart> {
-        let primary_type = Type::from_name(&self.primary_type, self.generation).await?;
+    pub fn get_defense_chart(&self, db: &Connection) -> Result<DefenseTypeChart> {
+        let primary_type = Type::from_name(&self.primary_type, self.generation, db)?;
 
         if let Some(secondary_type) = &self.secondary_type {
-            let secondary_type = Type::from_name(secondary_type, self.generation).await?;
+            let secondary_type = Type::from_name(secondary_type, self.generation, db)?;
 
             Ok(primary_type.defense_chart + secondary_type.defense_chart)
         } else {
@@ -102,10 +104,89 @@ pub struct Type {
     pub defense_chart: DefenseTypeChart,
     pub generation: u8,
 }
-
 impl Type {
-    pub async fn from_name(name: &str, generation: u8) -> Result<Self> {
-        api::get_type(name, generation).await
+    pub fn from_name(type_name: &str, generation: u8, db: &Connection) -> Result<Self> {
+        let type_row = TypeRow::select_by_name(type_name, db)?;
+        Type::from_row(type_row, generation, db)
+    }
+
+    fn relation_to_hashmap(
+        no_damage: &str,
+        half_damage: &str,
+        double_damage: &str,
+    ) -> HashMap<String, f32> {
+        let mut chart = HashMap::new();
+
+        Self::split_and_insert(&mut chart, no_damage, 0.0);
+        Self::split_and_insert(&mut chart, half_damage, 0.5);
+        Self::split_and_insert(&mut chart, double_damage, 2.0);
+
+        chart
+    }
+
+    fn split_and_insert(chart: &mut HashMap<String, f32>, damage_relation: &str, value: f32) {
+        damage_relation
+            .split(',')
+            .collect::<Vec<&str>>()
+            .into_iter()
+            .for_each(|type_| {
+                if !type_.is_empty() {
+                    chart.insert(type_.to_string(), value);
+                }
+            });
+    }
+}
+impl FromRow<TypeRow> for Type {
+    fn from_row(value: TypeRow, current_gen: u8, db: &Connection) -> Result<Self> {
+        let TypeRow {
+            id,
+            name,
+            mut no_damage_to,
+            mut half_damage_to,
+            mut double_damage_to,
+            mut no_damage_from,
+            mut half_damage_from,
+            mut double_damage_from,
+            generation,
+        } = value;
+
+        if current_gen < generation {
+            bail!(format!(
+                "Type '{name}' is not present in generation {current_gen}"
+            ));
+        }
+
+        let change_row = TypeChangeRow::select_by_fk(id, current_gen, db)?;
+        if let Some(change) = change_row {
+            no_damage_to = change.no_damage_to;
+            half_damage_to = change.half_damage_to;
+            double_damage_to = change.double_damage_to;
+
+            no_damage_from = change.no_damage_from;
+            half_damage_from = change.half_damage_from;
+            double_damage_from = change.double_damage_from;
+        }
+
+        let mut offense_chart = OffenseTypeChart::new(Self::relation_to_hashmap(
+            &no_damage_to,
+            &half_damage_to,
+            &double_damage_to,
+        ));
+        offense_chart.set_label(&name);
+
+        let mut defense_chart = DefenseTypeChart::new(Self::relation_to_hashmap(
+            &no_damage_from,
+            &half_damage_from,
+            &double_damage_from,
+        ));
+        defense_chart.set_label(&name);
+
+        Ok(Self {
+            name,
+            offense_chart,
+            defense_chart,
+            generation,
+        })
     }
 }
 
@@ -518,6 +599,25 @@ impl From<GameRow> for Game {
 mod tests {
     use super::*;
     use crate::resource::DatabaseFile;
+
+    #[test]
+    fn get_type_by_name() {
+        let DatabaseFile { ref db, .. } = DatabaseFile::try_new(false).unwrap();
+
+        // Fairy was not introduced until gen 6
+        Type::from_name("fairy", 5, db).unwrap_err();
+        Type::from_name("fairy", 6, db).unwrap();
+
+        // Bug gen 1 2x against poison
+        let bug_gen_1 = Type::from_name("bug", 1, db).unwrap();
+        assert_eq!(2.0, bug_gen_1.offense_chart.get_multiplier("poison"));
+        assert_eq!(1.0, bug_gen_1.offense_chart.get_multiplier("dark"));
+
+        // Bug gen >=2 2x against dark
+        let bug_gen_2 = Type::from_name("bug", 2, db).unwrap();
+        assert_eq!(0.5, bug_gen_2.offense_chart.get_multiplier("poison"));
+        assert_eq!(2.0, bug_gen_2.offense_chart.get_multiplier("dark"));
+    }
 
     #[test]
     fn get_move_by_name() {

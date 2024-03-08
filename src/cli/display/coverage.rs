@@ -1,47 +1,14 @@
 use super::{Colors, DisplayComponent};
-use crate::models::{Pokemon, PokemonData, Type, TypeChart, TypeCharts, TYPES};
+use crate::models::{Pokemon, Type, TypeChart, TypeCharts, TYPES};
 
 use std::collections::{hash_map::Entry, HashMap};
 use std::fmt;
 
-use anyhow::Result;
+use rusqlite::Connection;
 
 pub struct CoverageComponent<'a> {
-    pokemon: &'a Vec<Pokemon>,
-    resource: HashMap<String, Type>,
-}
-impl<'a> CoverageComponent<'a> {
-    pub async fn try_new(pokemon: &'a Vec<Pokemon>) -> Result<Self> {
-        let mut resource = HashMap::new();
-        for mon in pokemon {
-            let PokemonData {
-                generation,
-                ref primary_type,
-                ref secondary_type,
-                ..
-            } = mon.data;
-
-            Self::add_type_to_resource(primary_type, generation, &mut resource).await?;
-
-            if let Some(secondary_type) = secondary_type {
-                Self::add_type_to_resource(secondary_type, generation, &mut resource).await?;
-            }
-        }
-
-        Ok(Self { pokemon, resource })
-    }
-
-    async fn add_type_to_resource<'c>(
-        type_: &str,
-        generation: u8,
-        resource: &'c mut HashMap<String, Type>,
-    ) -> Result<()> {
-        if resource.get(type_).is_none() {
-            let type_data = Type::from_name(type_, generation).await?;
-            resource.insert(type_data.name.clone(), type_data);
-        }
-        Ok(())
-    }
+    pub pokemon: &'a Vec<Pokemon>,
+    pub db: &'a Connection,
 }
 
 impl fmt::Display for DisplayComponent<CoverageComponent<'_>> {
@@ -98,10 +65,7 @@ impl DisplayComponent<CoverageComponent<'_>> {
         let mut offense_coverage: HashMap<String, Vec<String>> = HashMap::new();
         let mut defense_coverage: HashMap<String, Vec<String>> = HashMap::new();
 
-        let CoverageComponent {
-            pokemon,
-            ref resource,
-        } = self.context;
+        let CoverageComponent { pokemon, db } = self.context;
 
         for type_ in TYPES {
             offense_coverage.insert(String::from(type_), vec![]);
@@ -116,12 +80,14 @@ impl DisplayComponent<CoverageComponent<'_>> {
         {
             let pokemon_name = &data.name;
 
-            let Type { offense_chart, .. } = resource.get(&data.primary_type).unwrap();
-            self.add_pokemon_to_coverage(pokemon_name, offense_chart, &mut offense_coverage);
+            let Type { offense_chart, .. } =
+                Type::from_name(&data.primary_type, data.generation, db).unwrap();
+            self.add_pokemon_to_coverage(pokemon_name, &offense_chart, &mut offense_coverage);
 
             if let Some(secondary_type) = data.secondary_type.as_ref() {
-                let Type { offense_chart, .. } = resource.get(secondary_type).unwrap();
-                self.add_pokemon_to_coverage(pokemon_name, offense_chart, &mut offense_coverage);
+                let Type { offense_chart, .. } =
+                    Type::from_name(secondary_type, data.generation, db).unwrap();
+                self.add_pokemon_to_coverage(pokemon_name, &offense_chart, &mut offense_coverage);
             }
 
             self.add_pokemon_to_coverage(pokemon_name, defense_chart, &mut defense_coverage);

@@ -3,10 +3,7 @@ pub mod once;
 pub mod utils;
 
 use crate::models::resource::{GameRow, MoveChangeRow, MoveRow, TypeChangeRow, TypeRow};
-use crate::models::{
-    Ability, DefenseTypeChart, EvolutionStep, OffenseTypeChart, PokemonData, PokemonGroup, Stats,
-    Type, TypeChart,
-};
+use crate::models::{Ability, EvolutionStep, PokemonData, PokemonGroup, Stats};
 use crate::resource::{GameResource, GetGeneration};
 use convert::FromChange;
 use once::{api_client, cache_manager, game_resource};
@@ -32,7 +29,7 @@ use rustemon::model::pokemon::{
     Ability as RustemonAbility, Pokemon as RustemonPokemon,
     PokemonAbility as RustemonPokemonAbility, PokemonMove as RustemonPokemonMove,
     PokemonSpecies as RustemonSpecies, PokemonType as RustemonTypeSlot,
-    PokemonTypePast as RustemonPastPokemonType, Type as RustemonType,
+    PokemonTypePast as RustemonPastPokemonType,
 };
 use rustemon::model::resource::VerboseEffect as RustemonVerboseEffect;
 
@@ -105,45 +102,6 @@ pub async fn get_all_type_rows(
     }
 
     Ok((type_data, change_type_data))
-}
-
-pub async fn get_type(type_name: &str, current_gen: u8) -> Result<Type> {
-    rustemon_type(type_name, current_gen, api_client(), game_resource()).await
-}
-async fn rustemon_type(
-    type_name: &str,
-    current_gen: u8,
-    client: &RustemonClient,
-    game_resource: &GameResource,
-) -> Result<Type> {
-    let RustemonType {
-        name,
-        damage_relations,
-        past_damage_relations,
-        generation,
-        ..
-    } = rustemon_type::get_by_name(type_name, client).await?;
-
-    if current_gen < game_resource.get_gen_from_url(&generation.url) {
-        bail!(format!(
-            "Type '{type_name}' is not present in generation {current_gen}"
-        ))
-    }
-
-    let relations = utils::match_past(current_gen, &past_damage_relations, game_resource)
-        .unwrap_or(damage_relations);
-
-    let mut offense_chart = OffenseTypeChart::from(&relations);
-    offense_chart.set_label(type_name);
-    let mut defense_chart = DefenseTypeChart::from(&relations);
-    defense_chart.set_label(type_name);
-
-    Ok(Type {
-        name,
-        offense_chart,
-        defense_chart,
-        generation: current_gen,
-    })
 }
 
 pub async fn get_ability(ability_name: &str, current_gen: u8) -> Result<Ability> {
@@ -340,23 +298,8 @@ pub async fn clear_cache() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[tokio::test]
-    async fn get_type_test() {
-        // Fairy was not introduced until gen 6
-        get_type("fairy", 5).await.unwrap_err();
-        get_type("fairy", 6).await.unwrap();
-
-        // Bug gen 1 2x against poison
-        let bug_gen_1 = get_type("bug", 1).await.unwrap();
-        assert_eq!(2.0, bug_gen_1.offense_chart.get_multiplier("poison"));
-        assert_eq!(1.0, bug_gen_1.offense_chart.get_multiplier("dark"));
-
-        // Bug gen >=2 2x against dark
-        let bug_gen_2 = get_type("bug", 2).await.unwrap();
-        assert_eq!(0.5, bug_gen_2.offense_chart.get_multiplier("poison"));
-        assert_eq!(2.0, bug_gen_2.offense_chart.get_multiplier("dark"));
-    }
+    use crate::models::TypeChart;
+    use crate::resource::DatabaseFile;
 
     #[tokio::test]
     async fn get_ability_test() {
@@ -367,6 +310,8 @@ mod tests {
 
     #[tokio::test]
     async fn get_pokemon_test() {
+        let DatabaseFile { ref db, .. } = DatabaseFile::try_new(false).unwrap();
+
         // Ogerpon was not inroduced until gen 9
         get_pokemon("ogerpon", "sword-shield").await.unwrap_err();
         get_pokemon("ogerpon", "the-teal-mask").await.unwrap();
@@ -377,7 +322,7 @@ mod tests {
 
         // Test dual type defense chart
         let golem = get_pokemon("golem", "scarlet-violet").await.unwrap();
-        let golem_defense = golem.get_defense_chart().await.unwrap();
+        let golem_defense = golem.get_defense_chart(db).unwrap();
         assert_eq!(4.0, golem_defense.get_multiplier("water"));
         assert_eq!(2.0, golem_defense.get_multiplier("fighting"));
         assert_eq!(1.0, golem_defense.get_multiplier("psychic"));

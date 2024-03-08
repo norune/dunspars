@@ -94,7 +94,12 @@ impl FromChange<&PastMoveStatValues> for MoveChangeRow {
 
         let effect = effect_entries.get_effect();
         let type_ = type_.clone().map(|t| t.name);
-        let generation = Self::game_to_gen(&version_group.name, db);
+
+        // For whatever reason, pokeapi denotes past move values
+        // on the generation when they stop being applicable.
+        // e.g. Tackle 35 power 95 accuracy is applicable to gen 1-4
+        // However, pokeapi labels this past value as gen 5.
+        let generation = Self::game_to_gen(&version_group.name, db) - 1;
 
         Self {
             id: None,

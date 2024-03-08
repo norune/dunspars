@@ -31,12 +31,14 @@ pub trait SelectRow: TableRow + Sized {
 pub trait SelectChangeRow: TableRow + Sized {
     fn select_by_fk(fk_id: i64, generation: u8, db: &Connection) -> SqlResult<Option<Self>> {
         let query = format!(
-            "SELECT * FROM {table} WHERE move_id = ?1 AND generation > ?2 ORDER BY generation ASC",
-            table = Self::table()
+            "SELECT * FROM {table} WHERE {fk} = ?1 AND generation >= ?2 ORDER BY generation ASC",
+            table = Self::table(),
+            fk = Self::fk()
         );
         db.query_row(&query, [fk_id, generation as i64], Self::on_hit)
             .optional()
     }
+    fn fk() -> &'static str;
     fn on_hit(row: &Row<'_>) -> SqlResult<Self>;
 }
 
@@ -155,6 +157,10 @@ impl SelectChangeRow for MoveChangeRow {
             move_id: row.get(8)?,
         })
     }
+
+    fn fk() -> &'static str {
+        "move_id"
+    }
 }
 impl InsertRow for MoveChangeRow {
     fn query() -> &'static str {
@@ -255,6 +261,10 @@ impl SelectChangeRow for TypeChangeRow {
             generation: row.get(7)?,
             type_id: row.get(8)?,
         })
+    }
+
+    fn fk() -> &'static str {
+        "type_id"
     }
 }
 impl InsertRow for TypeChangeRow {

@@ -236,7 +236,7 @@ impl Program {
         let pokemon = PokemonData::from_name(&pokemon_name, &self.config.game).await?;
         let pokemon_display = DisplayComponent::new(&pokemon, self.config.color_enabled);
 
-        let defense_chart = pokemon.get_defense_chart().await?;
+        let defense_chart = pokemon.get_defense_chart(&self.db_file.db)?;
         let defense_chart_ctx = TypeChartComponent {
             type_chart: &defense_chart,
         };
@@ -293,7 +293,7 @@ impl Program {
             offense_chart,
             defense_chart,
             ..
-        } = Type::from_name(&type_name, self.config.generation).await?;
+        } = Type::from_name(&type_name, self.config.generation, &self.db_file.db)?;
 
         let offense_chart_ctx = TypeChartComponent {
             type_chart: &offense_chart,
@@ -330,7 +330,7 @@ impl Program {
         let attacker_name = resource.validate(&attacker_name)?;
         let attacker_data = PokemonData::from_name(&attacker_name, &self.config.game).await?;
         let attacker_moves = attacker_data.get_moves(&self.db_file.db)?;
-        let attacker_chart = attacker_data.get_defense_chart().await?;
+        let attacker_chart = attacker_data.get_defense_chart(&self.db_file.db)?;
         let attacker = Pokemon::new(attacker_data, attacker_chart, attacker_moves);
 
         let mut defenders = vec![];
@@ -339,7 +339,7 @@ impl Program {
             let defender_name = resource.validate(&defender_name)?;
             let defender_data = PokemonData::from_name(&defender_name, &self.config.game).await?;
             let defender_moves = defender_data.get_moves(&self.db_file.db)?;
-            let defender_chart = defender_data.get_defense_chart().await?;
+            let defender_chart = defender_data.get_defense_chart(&self.db_file.db)?;
             let defender = Pokemon::new(defender_data, defender_chart, defender_moves);
 
             defenders.push(defender);
@@ -376,13 +376,16 @@ impl Program {
             let name = resource.validate(&name)?;
             let data = PokemonData::from_name(&name, &self.config.game).await?;
             let moves = data.get_moves(&self.db_file.db)?;
-            let chart = data.get_defense_chart().await?;
+            let chart = data.get_defense_chart(&self.db_file.db)?;
 
             let mon = Pokemon::new(data, chart, moves);
             pokemon.push(mon);
         }
 
-        let coverage_ctx = CoverageComponent::try_new(&pokemon).await?;
+        let coverage_ctx = CoverageComponent {
+            pokemon: &pokemon,
+            db: &self.db_file.db,
+        };
         let coverage_display = DisplayComponent::new(coverage_ctx, self.config.color_enabled);
 
         Ok(formatdoc! {
