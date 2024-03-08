@@ -90,7 +90,7 @@ impl TableRow for MoveRow {
 }
 impl SelectRow for MoveRow {
     fn on_hit(row: &Row<'_>) -> SqlResult<Self> {
-        Ok(MoveRow {
+        Ok(Self {
             id: row.get(0)?,
             name: row.get(1)?,
             power: row.get(2)?,
@@ -125,7 +125,7 @@ impl InsertRow for MoveRow {
     }
 }
 
-pub struct ChangeMoveValueRow {
+pub struct MoveChangeRow {
     pub id: Option<i64>,
     pub power: Option<i64>,
     pub accuracy: Option<i64>,
@@ -136,14 +136,14 @@ pub struct ChangeMoveValueRow {
     pub generation: u8,
     pub move_id: i64,
 }
-impl TableRow for ChangeMoveValueRow {
+impl TableRow for MoveChangeRow {
     fn table() -> &'static str {
-        "change_move_value"
+        "move_changes"
     }
 }
-impl SelectChangeRow for ChangeMoveValueRow {
+impl SelectChangeRow for MoveChangeRow {
     fn on_hit(row: &Row<'_>) -> SqlResult<Self> {
-        Ok(ChangeMoveValueRow {
+        Ok(Self {
             id: row.get(0)?,
             power: row.get(1)?,
             accuracy: row.get(2)?,
@@ -156,9 +156,9 @@ impl SelectChangeRow for ChangeMoveValueRow {
         })
     }
 }
-impl InsertRow for ChangeMoveValueRow {
+impl InsertRow for MoveChangeRow {
     fn query() -> &'static str {
-        include_str!("../sql/insert_change_move_value.sql")
+        include_str!("../sql/insert_move_change.sql")
     }
     fn insert(&self, statement: &mut Statement) -> SqlResult<usize> {
         statement.execute(params![
@@ -171,6 +171,108 @@ impl InsertRow for ChangeMoveValueRow {
             self.type_,
             self.generation,
             self.move_id
+        ])
+    }
+}
+
+pub struct TypeRow {
+    pub id: i64,
+    pub name: String,
+    pub no_damage_to: String,
+    pub half_damage_to: String,
+    pub double_damage_to: String,
+    pub no_damage_from: String,
+    pub half_damage_from: String,
+    pub double_damage_from: String,
+    pub generation: u8,
+}
+impl TableRow for TypeRow {
+    fn table() -> &'static str {
+        "types"
+    }
+}
+impl SelectRow for TypeRow {
+    fn on_hit(row: &Row<'_>) -> SqlResult<Self> {
+        Ok(Self {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            no_damage_to: row.get(2)?,
+            half_damage_to: row.get(3)?,
+            double_damage_to: row.get(4)?,
+            no_damage_from: row.get(5)?,
+            half_damage_from: row.get(6)?,
+            double_damage_from: row.get(7)?,
+            generation: row.get(8)?,
+        })
+    }
+}
+impl InsertRow for TypeRow {
+    fn query() -> &'static str {
+        include_str!("../sql/insert_type.sql")
+    }
+
+    fn insert(&self, statement: &mut Statement) -> SqlResult<usize> {
+        statement.execute(params![
+            self.id,
+            self.name,
+            self.no_damage_to,
+            self.half_damage_to,
+            self.double_damage_to,
+            self.no_damage_from,
+            self.half_damage_from,
+            self.double_damage_from,
+            self.generation
+        ])
+    }
+}
+
+pub struct TypeChangeRow {
+    pub id: Option<i64>,
+    pub no_damage_to: String,
+    pub half_damage_to: String,
+    pub double_damage_to: String,
+    pub no_damage_from: String,
+    pub half_damage_from: String,
+    pub double_damage_from: String,
+    pub generation: u8,
+    pub type_id: i64,
+}
+impl TableRow for TypeChangeRow {
+    fn table() -> &'static str {
+        "type_changes"
+    }
+}
+impl SelectChangeRow for TypeChangeRow {
+    fn on_hit(row: &Row<'_>) -> SqlResult<Self> {
+        Ok(Self {
+            id: row.get(0)?,
+            no_damage_to: row.get(1)?,
+            half_damage_to: row.get(2)?,
+            double_damage_to: row.get(3)?,
+            no_damage_from: row.get(4)?,
+            half_damage_from: row.get(5)?,
+            double_damage_from: row.get(6)?,
+            generation: row.get(7)?,
+            type_id: row.get(8)?,
+        })
+    }
+}
+impl InsertRow for TypeChangeRow {
+    fn query() -> &'static str {
+        include_str!("../sql/insert_type_change.sql")
+    }
+
+    fn insert(&self, statement: &mut Statement) -> SqlResult<usize> {
+        statement.execute(params![
+            self.id,
+            self.no_damage_to,
+            self.half_damage_to,
+            self.double_damage_to,
+            self.no_damage_from,
+            self.half_damage_from,
+            self.double_damage_from,
+            self.generation,
+            self.type_id
         ])
     }
 }

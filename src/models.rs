@@ -1,7 +1,7 @@
 pub mod resource;
 
 use crate::api;
-use resource::{ChangeMoveValueRow, FromRow, GameRow, MoveRow, SelectChangeRow, SelectRow};
+use resource::{FromRow, GameRow, MoveChangeRow, MoveRow, SelectChangeRow, SelectRow};
 
 use std::collections::HashMap;
 use std::ops::Add;
@@ -280,7 +280,7 @@ impl FromRow<MoveRow> for Move {
             ));
         }
 
-        let change_row = ChangeMoveValueRow::select_by_fk(id, current_gen, db)?;
+        let change_row = MoveChangeRow::select_by_fk(id, current_gen, db)?;
         if let Some(change) = change_row {
             power = change.power.or(power);
             accuracy = change.accuracy.or(accuracy);

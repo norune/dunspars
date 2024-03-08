@@ -1,4 +1,4 @@
-INSERT INTO change_move_value (
+INSERT INTO move_changes (
     [id],
     [power],
     [accuracy],

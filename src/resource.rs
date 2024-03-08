@@ -1,6 +1,7 @@
+use crate::api::once::api_client;
 use crate::api::utils::{self, capture_gen_url, get_all_game_data};
-use crate::api::{get_all_game_rows, get_all_move_rows};
-use crate::models::resource::{ChangeMoveValueRow, GameRow, InsertRow, MoveRow};
+use crate::api::{get_all_game_rows, get_all_move_rows, get_all_type_rows};
+use crate::models::resource::{GameRow, InsertRow, MoveChangeRow, MoveRow, TypeChangeRow, TypeRow};
 use crate::models::Game;
 
 use std::collections::HashMap;
@@ -317,8 +318,8 @@ fn path_exists(path: &Path) -> bool {
 }
 
 pub struct DatabaseFile {
-    path: PathBuf,
     pub db: Connection,
+    path: PathBuf,
 }
 impl DatabaseFile {
     pub fn try_new(overwrite: bool) -> Result<Self> {
@@ -336,8 +337,14 @@ impl DatabaseFile {
 
     pub async fn build_db(&self) -> Result<()> {
         self.create_schema()?;
+        println!("retrieving games");
         self.populate_games().await?;
+
+        println!("retrieving moves");
         self.populate_moves().await?;
+
+        println!("retrieving types");
+        self.populate_types().await?;
         Ok(())
     }
 
@@ -346,7 +353,7 @@ impl DatabaseFile {
     }
 
     async fn populate_games(&self) -> Result<()> {
-        let games = get_all_game_rows().await?;
+        let games = get_all_game_rows(api_client()).await?;
         let mut statement = GameRow::insert_stmt(&self.db)?;
         for game in games {
             game.insert(&mut statement)?;
@@ -355,16 +362,32 @@ impl DatabaseFile {
     }
 
     async fn populate_moves(&self) -> Result<()> {
-        let (moves, move_changes) = get_all_move_rows(&self.db).await?;
+        let (moves, move_changes) = get_all_move_rows(api_client(), &self.db).await?;
 
         let mut insert_move = MoveRow::insert_stmt(&self.db)?;
         for move_ in moves {
             move_.insert(&mut insert_move)?;
         }
 
-        let mut insert_move_changes = ChangeMoveValueRow::insert_stmt(&self.db)?;
+        let mut insert_move_changes = MoveChangeRow::insert_stmt(&self.db)?;
         for change in move_changes {
             change.insert(&mut insert_move_changes)?;
+        }
+
+        Ok(())
+    }
+
+    async fn populate_types(&self) -> Result<()> {
+        let (types, type_changes) = get_all_type_rows(api_client(), &self.db).await?;
+
+        let mut insert_type = TypeRow::insert_stmt(&self.db)?;
+        for type_ in types {
+            type_.insert(&mut insert_type)?;
+        }
+
+        let mut insert_type_changes = TypeChangeRow::insert_stmt(&self.db)?;
+        for change in type_changes {
+            change.insert(&mut insert_type_changes)?;
         }
 
         Ok(())

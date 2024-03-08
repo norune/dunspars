@@ -2,7 +2,7 @@ mod convert;
 pub mod once;
 pub mod utils;
 
-use crate::models::resource::{ChangeMoveValueRow, GameRow, MoveRow};
+use crate::models::resource::{GameRow, MoveChangeRow, MoveRow, TypeChangeRow, TypeRow};
 use crate::models::{
     Ability, DefenseTypeChart, EvolutionStep, OffenseTypeChart, PokemonData, PokemonGroup, Stats,
     Type, TypeChart,
@@ -10,7 +10,7 @@ use crate::models::{
 use crate::resource::{GameResource, GetGeneration};
 use convert::FromChange;
 use once::{api_client, cache_manager, game_resource};
-use utils::{get_all_games, get_all_moves};
+use utils::{get_all_games, get_all_moves, get_all_types};
 
 use std::collections::HashMap;
 
@@ -36,11 +36,11 @@ use rustemon::model::pokemon::{
 };
 use rustemon::model::resource::VerboseEffect as RustemonVerboseEffect;
 
-pub async fn get_all_game_rows() -> Result<Vec<GameRow>> {
-    let game_names = get_all_games(api_client()).await?;
+pub async fn get_all_game_rows(client: &RustemonClient) -> Result<Vec<GameRow>> {
+    let game_names = get_all_games(client).await?;
     let game_data_futures: FuturesOrdered<_> = game_names
         .iter()
-        .map(|g| rustemon_version::get_by_name(g, api_client()))
+        .map(|g| rustemon_version::get_by_name(g, client))
         .collect();
     let game_results: Vec<_> = game_data_futures.collect().await;
     let mut game_data = vec![];
@@ -53,22 +53,23 @@ pub async fn get_all_game_rows() -> Result<Vec<GameRow>> {
     Ok(game_data)
 }
 
-pub async fn get_all_move_rows(db: &Connection) -> Result<(Vec<MoveRow>, Vec<ChangeMoveValueRow>)> {
-    let move_names = get_all_moves(api_client()).await?;
-    println!("retrieving moves");
+pub async fn get_all_move_rows(
+    client: &RustemonClient,
+    db: &Connection,
+) -> Result<(Vec<MoveRow>, Vec<MoveChangeRow>)> {
+    let move_names = get_all_moves(client).await?;
     let move_futures: FuturesOrdered<_> = move_names
         .iter()
-        .map(|g| rustemon_moves::get_by_name(g, api_client()))
+        .map(|g| rustemon_moves::get_by_name(g, client))
         .collect();
     let move_results: Vec<_> = move_futures.collect().await;
     let mut move_data = vec![];
     let mut change_move_data = vec![];
-    println!("moves retrieved");
 
     for move_ in move_results {
         let move_ = move_?;
         for past_value in move_.past_values.iter() {
-            let change_move = ChangeMoveValueRow::from_change(past_value, move_.id, db);
+            let change_move = MoveChangeRow::from_change(past_value, move_.id, db);
             change_move_data.push(change_move);
         }
 
@@ -77,6 +78,33 @@ pub async fn get_all_move_rows(db: &Connection) -> Result<(Vec<MoveRow>, Vec<Cha
     }
 
     Ok((move_data, change_move_data))
+}
+
+pub async fn get_all_type_rows(
+    client: &RustemonClient,
+    db: &Connection,
+) -> Result<(Vec<TypeRow>, Vec<TypeChangeRow>)> {
+    let type_names = get_all_types(client).await?;
+    let type_futures: FuturesOrdered<_> = type_names
+        .iter()
+        .map(|g| rustemon_type::get_by_name(g, client))
+        .collect();
+    let type_results: Vec<_> = type_futures.collect().await;
+    let mut type_data = vec![];
+    let mut change_type_data = vec![];
+
+    for type_ in type_results {
+        let type_ = type_?;
+        for past_type in type_.past_damage_relations.iter() {
+            let change_move = TypeChangeRow::from_change(past_type, type_.id, db);
+            change_type_data.push(change_move);
+        }
+
+        let move_ = TypeRow::from(type_);
+        type_data.push(move_);
+    }
+
+    Ok((type_data, change_type_data))
 }
 
 pub async fn get_type(type_name: &str, current_gen: u8) -> Result<Type> {

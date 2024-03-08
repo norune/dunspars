@@ -1,17 +1,11 @@
 use crate::api::utils::capture_gen_url;
-use crate::models::resource::{ChangeMoveValueRow, GameRow, MoveRow, SelectRow};
+use crate::models::resource::{GameRow, MoveChangeRow, MoveRow, SelectRow, TypeChangeRow, TypeRow};
+
 use rusqlite::Connection;
 use rustemon::model::games::VersionGroup;
 use rustemon::model::moves::{Move, PastMoveStatValues};
-use rustemon::model::resource::VerboseEffect;
-
-pub trait FromChange<T> {
-    fn game_to_gen(game: &str, db: &Connection) -> u8 {
-        let game = GameRow::select_by_name(game, db).unwrap();
-        game.generation
-    }
-    fn from_change(value: T, id: i64, db: &Connection) -> Self;
-}
+use rustemon::model::pokemon::{Type, TypeRelations, TypeRelationsPast};
+use rustemon::model::resource::{NamedApiResource, VerboseEffect};
 
 trait GetEffectEntry {
     fn get_effect(&self) -> Option<String>;
@@ -78,7 +72,15 @@ impl From<Move> for MoveRow {
     }
 }
 
-impl FromChange<&PastMoveStatValues> for ChangeMoveValueRow {
+pub trait FromChange<T> {
+    fn game_to_gen(game: &str, db: &Connection) -> u8 {
+        let game = GameRow::select_by_name(game, db).unwrap();
+        game.generation
+    }
+    fn from_change(value: T, id: i64, db: &Connection) -> Self;
+}
+
+impl FromChange<&PastMoveStatValues> for MoveChangeRow {
     fn from_change(value: &PastMoveStatValues, id: i64, db: &Connection) -> Self {
         let PastMoveStatValues {
             accuracy,
@@ -104,6 +106,84 @@ impl FromChange<&PastMoveStatValues> for ChangeMoveValueRow {
             effect,
             generation,
             move_id: id,
+        }
+    }
+}
+
+trait GetTypes {
+    fn get_types(&self) -> String;
+}
+
+impl GetTypes for Vec<NamedApiResource<Type>> {
+    fn get_types(&self) -> String {
+        self.iter()
+            .map(|r| r.name.clone())
+            .collect::<Vec<String>>()
+            .join(",")
+    }
+}
+
+impl From<Type> for TypeRow {
+    fn from(value: Type) -> Self {
+        let Type {
+            id,
+            name,
+            damage_relations,
+            generation,
+            ..
+        } = value;
+
+        let TypeRelations {
+            no_damage_to,
+            half_damage_to,
+            double_damage_to,
+            no_damage_from,
+            half_damage_from,
+            double_damage_from,
+        } = damage_relations;
+        let generation = capture_gen_url(&generation.url).unwrap();
+
+        Self {
+            id,
+            name,
+            no_damage_to: no_damage_to.get_types(),
+            half_damage_to: half_damage_to.get_types(),
+            double_damage_to: double_damage_to.get_types(),
+            no_damage_from: no_damage_from.get_types(),
+            half_damage_from: half_damage_from.get_types(),
+            double_damage_from: double_damage_from.get_types(),
+            generation,
+        }
+    }
+}
+
+impl FromChange<&TypeRelationsPast> for TypeChangeRow {
+    fn from_change(value: &TypeRelationsPast, id: i64, _db: &Connection) -> Self {
+        let TypeRelationsPast {
+            generation,
+            damage_relations,
+        } = value;
+
+        let TypeRelations {
+            no_damage_to,
+            half_damage_to,
+            double_damage_to,
+            no_damage_from,
+            half_damage_from,
+            double_damage_from,
+        } = damage_relations;
+        let generation = capture_gen_url(&generation.url).unwrap();
+
+        Self {
+            id: None,
+            no_damage_to: no_damage_to.get_types(),
+            half_damage_to: half_damage_to.get_types(),
+            double_damage_to: double_damage_to.get_types(),
+            no_damage_from: no_damage_from.get_types(),
+            half_damage_from: half_damage_from.get_types(),
+            double_damage_from: double_damage_from.get_types(),
+            generation,
+            type_id: id,
         }
     }
 }
