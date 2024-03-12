@@ -5,6 +5,60 @@ CREATE TABLE games (
     [generation] INTEGER NOT NULL
 );
 
+CREATE TABLE evolutions (
+    [id] INTEGER PRIMARY KEY,
+    [evolution] TEXT NOT NULL
+);
+
+CREATE TABLE species (
+    [id] INTEGER PRIMARY KEY,
+    [name] TEXT NOT NULL,
+    [type] TEXT NOT NULL,
+    [evolution_id] INTEGER NOT NULL,
+    FOREIGN KEY([evolution_id]) REFERENCES evolutions([id])
+);
+
+CREATE TABLE pokemon (
+    [id] INTEGER PRIMARY KEY,
+    [name] TEXT NOT NULL,
+    [primary_type] TEXT NOT NULL,
+    [secondary_type] TEXT,
+    [attack] INTEGER NOT NULL,
+    [defense] INTEGER NOT NULL,
+    [special_attack] INTEGER NOT NULL,
+    [special_defense] INTEGER NOT NULL,
+    [speed] INTEGER NOT NULL,
+    [species_id] INTEGER NOT NULL,
+    FOREIGN KEY([species_id]) REFERENCES species([id])
+);
+
+CREATE TABLE pokemon_moves (
+    [id] INTEGER PRIMARY KEY,
+    [name] TEXT NOT NULL,
+    [learn_method] TEXT NOT NULL,
+    [learn_level] INTEGER NOT NULL,
+    [generation] INTEGER NOT NULL,
+    [pokemon_id] INTEGER NOT NULL,
+    FOREIGN KEY([pokemon_id]) REFERENCES pokemon([id])
+);
+
+CREATE TABLE pokemon_abilities (
+    [id] INTEGER PRIMARY KEY,
+    [name] TEXT NOT NULL,
+    [hidden] BOOLEAN NOT NULL,
+    [pokemon_id] INTEGER NOT NULL,
+    FOREIGN KEY([pokemon_id]) REFERENCES pokemon([id])
+);
+
+CREATE TABLE pokemon_type_changes (
+    [id] INTEGER PRIMARY KEY,
+    [primary_type] TEXT NOT NULL,
+    [secondary_type] TEXT,
+    [generation] INTEGER NOT NULL,
+    [pokemon_id] INTEGER NOT NULL,
+    FOREIGN KEY([pokemon_id]) REFERENCES pokemon([id])
+);
+
 CREATE TABLE moves (
     [id] INTEGER PRIMARY KEY,
     [name] TEXT NOT NULL,

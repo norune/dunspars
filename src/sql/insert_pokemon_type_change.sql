@@ -1,0 +1,1 @@
+INSERT INTO pokemon_type_changes ([id], [primary_type], [secondary_type], [generation], [pokemon_id]) VALUES (?1, ?2, ?3, ?4, ?5);

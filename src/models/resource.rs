@@ -1,5 +1,5 @@
 use anyhow::Result;
-use rusqlite::{params, Connection, OptionalExtension, Result as SqlResult, Row, Statement};
+use rusqlite::{params, Connection, OptionalExtension, Result as SqlResult, Row};
 
 pub trait FromRow<T>: Sized {
     fn from_row(value: T, current_gen: u8, db: &Connection) -> Result<Self>;
@@ -10,11 +10,7 @@ pub trait TableRow {
 }
 
 pub trait InsertRow {
-    fn insert_stmt(db: &Connection) -> SqlResult<Statement> {
-        db.prepare(Self::query())
-    }
-    fn query() -> &'static str;
-    fn insert(&self, statement: &mut Statement) -> SqlResult<usize>;
+    fn insert(&self, db: &Connection) -> SqlResult<usize>;
 }
 
 pub trait SelectRow: TableRow + Sized {
@@ -64,11 +60,8 @@ impl SelectRow for GameRow {
     }
 }
 impl InsertRow for GameRow {
-    fn query() -> &'static str {
-        include_str!("../sql/insert_game.sql")
-    }
-
-    fn insert(&self, statement: &mut Statement) -> SqlResult<usize> {
+    fn insert(&self, db: &Connection) -> SqlResult<usize> {
+        let mut statement = db.prepare_cached(include_str!("../sql/insert_game.sql"))?;
         statement.execute(params![self.id, self.name, self.order, self.generation])
     }
 }
@@ -107,11 +100,8 @@ impl SelectRow for MoveRow {
     }
 }
 impl InsertRow for MoveRow {
-    fn query() -> &'static str {
-        include_str!("../sql/insert_move.sql")
-    }
-
-    fn insert(&self, statement: &mut Statement) -> SqlResult<usize> {
+    fn insert(&self, db: &Connection) -> SqlResult<usize> {
+        let mut statement = db.prepare_cached(include_str!("../sql/insert_move.sql"))?;
         statement.execute(params![
             self.id,
             self.name,
@@ -163,10 +153,8 @@ impl SelectChangeRow for MoveChangeRow {
     }
 }
 impl InsertRow for MoveChangeRow {
-    fn query() -> &'static str {
-        include_str!("../sql/insert_move_change.sql")
-    }
-    fn insert(&self, statement: &mut Statement) -> SqlResult<usize> {
+    fn insert(&self, db: &Connection) -> SqlResult<usize> {
+        let mut statement = db.prepare_cached(include_str!("../sql/insert_move_change.sql"))?;
         statement.execute(params![
             self.id,
             self.power,
@@ -178,6 +166,19 @@ impl InsertRow for MoveChangeRow {
             self.generation,
             self.move_id
         ])
+    }
+}
+
+pub enum MoveRowGroup {
+    MoveRow(MoveRow),
+    MoveChangeRow(MoveChangeRow),
+}
+impl InsertRow for MoveRowGroup {
+    fn insert(&self, db: &Connection) -> SqlResult<usize> {
+        match self {
+            MoveRowGroup::MoveChangeRow(row) => row.insert(db),
+            MoveRowGroup::MoveRow(row) => row.insert(db),
+        }
     }
 }
 
@@ -213,11 +214,8 @@ impl SelectRow for TypeRow {
     }
 }
 impl InsertRow for TypeRow {
-    fn query() -> &'static str {
-        include_str!("../sql/insert_type.sql")
-    }
-
-    fn insert(&self, statement: &mut Statement) -> SqlResult<usize> {
+    fn insert(&self, db: &Connection) -> SqlResult<usize> {
+        let mut statement = db.prepare_cached(include_str!("../sql/insert_type.sql"))?;
         statement.execute(params![
             self.id,
             self.name,
@@ -268,11 +266,8 @@ impl SelectChangeRow for TypeChangeRow {
     }
 }
 impl InsertRow for TypeChangeRow {
-    fn query() -> &'static str {
-        include_str!("../sql/insert_type_change.sql")
-    }
-
-    fn insert(&self, statement: &mut Statement) -> SqlResult<usize> {
+    fn insert(&self, db: &Connection) -> SqlResult<usize> {
+        let mut statement = db.prepare_cached(include_str!("../sql/insert_type_change.sql"))?;
         statement.execute(params![
             self.id,
             self.no_damage_to,
@@ -284,6 +279,19 @@ impl InsertRow for TypeChangeRow {
             self.generation,
             self.type_id
         ])
+    }
+}
+
+pub enum TypeRowGroup {
+    TypeRow(TypeRow),
+    TypeChangeRow(TypeChangeRow),
+}
+impl InsertRow for TypeRowGroup {
+    fn insert(&self, db: &Connection) -> SqlResult<usize> {
+        match self {
+            TypeRowGroup::TypeRow(row) => row.insert(db),
+            TypeRowGroup::TypeChangeRow(row) => row.insert(db),
+        }
     }
 }
 
@@ -309,11 +317,148 @@ impl SelectRow for AbilityRow {
     }
 }
 impl InsertRow for AbilityRow {
-    fn query() -> &'static str {
-        include_str!("../sql/insert_ability.sql")
-    }
-
-    fn insert(&self, statement: &mut Statement) -> SqlResult<usize> {
+    fn insert(&self, db: &Connection) -> SqlResult<usize> {
+        let mut statement = db.prepare_cached(include_str!("../sql/insert_ability.sql"))?;
         statement.execute(params![self.id, self.name, self.effect, self.generation])
+    }
+}
+
+pub struct EvolutionRow {
+    id: i64,
+    evolution: String,
+}
+impl TableRow for EvolutionRow {
+    fn table() -> &'static str {
+        "evolutions"
+    }
+}
+impl InsertRow for EvolutionRow {
+    fn insert(&self, db: &Connection) -> SqlResult<usize> {
+        let mut statement = db.prepare_cached(include_str!("../sql/insert_evolution.sql"))?;
+        statement.execute(params![self.id, self.evolution,])
+    }
+}
+
+pub struct SpeciesRow {
+    id: i64,
+    name: String,
+    type_: String,
+    evolution_id: i64,
+}
+impl TableRow for SpeciesRow {
+    fn table() -> &'static str {
+        "species"
+    }
+}
+impl InsertRow for SpeciesRow {
+    fn insert(&self, db: &Connection) -> SqlResult<usize> {
+        let mut statement = db.prepare_cached(include_str!("../sql/insert_species.sql"))?;
+        statement.execute(params![self.id, self.name, self.type_, self.evolution_id,])
+    }
+}
+
+pub struct PokemonRow {
+    id: i64,
+    name: String,
+    primary_type: String,
+    secondary_type: Option<String>,
+    attack: i64,
+    defense: i64,
+    special_attack: i64,
+    special_defense: i64,
+    speed: i64,
+    species_id: i64,
+}
+impl TableRow for PokemonRow {
+    fn table() -> &'static str {
+        "pokemon"
+    }
+}
+impl InsertRow for PokemonRow {
+    fn insert(&self, db: &Connection) -> SqlResult<usize> {
+        let mut statement = db.prepare_cached(include_str!("../sql/insert_pokemon.sql"))?;
+        statement.execute(params![
+            self.id,
+            self.name,
+            self.primary_type,
+            self.secondary_type,
+            self.attack,
+            self.defense,
+            self.special_attack,
+            self.special_defense,
+            self.speed,
+            self.species_id,
+        ])
+    }
+}
+
+pub struct PokemonMoveRow {
+    id: i64,
+    name: String,
+    learn_method: String,
+    learn_level: i64,
+    generation: u8,
+    pokemon_id: i64,
+}
+impl TableRow for PokemonMoveRow {
+    fn table() -> &'static str {
+        "pokemon_moves"
+    }
+}
+impl InsertRow for PokemonMoveRow {
+    fn insert(&self, db: &Connection) -> SqlResult<usize> {
+        let mut statement = db.prepare_cached(include_str!("../sql/insert_pokemon_move.sql"))?;
+        statement.execute(params![
+            self.id,
+            self.name,
+            self.learn_method,
+            self.learn_level,
+            self.generation,
+            self.pokemon_id,
+        ])
+    }
+}
+
+pub struct PokemonAbilityRow {
+    id: i64,
+    name: String,
+    hidden: bool,
+    pokemon_id: i64,
+}
+impl TableRow for PokemonAbilityRow {
+    fn table() -> &'static str {
+        "pokemon_abilities"
+    }
+}
+impl InsertRow for PokemonAbilityRow {
+    fn insert(&self, db: &Connection) -> SqlResult<usize> {
+        let mut statement = db.prepare_cached(include_str!("../sql/insert_pokemon_ability.sql"))?;
+        statement.execute(params![self.id, self.name, self.hidden, self.pokemon_id,])
+    }
+}
+
+pub struct PokemonTypeChangeRow {
+    id: i64,
+    primary_type: String,
+    secondary_type: Option<String>,
+    generation: u8,
+    pokemon_id: i64,
+}
+impl TableRow for PokemonTypeChangeRow {
+    fn table() -> &'static str {
+        "pokemon_type_changes"
+    }
+}
+impl InsertRow for PokemonTypeChangeRow {
+    fn insert(&self, db: &Connection) -> SqlResult<usize> {
+        let mut statement =
+            db.prepare_cached(include_str!("../sql/insert_pokemon_type_change.sql"))?;
+        statement.execute(params![
+            self.id,
+            self.primary_type,
+            self.secondary_type,
+            self.generation,
+            self.pokemon_id,
+        ])
     }
 }

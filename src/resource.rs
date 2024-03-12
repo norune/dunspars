@@ -1,9 +1,7 @@
+use crate::api::convert::{AbilityFetcher, FetchAllEntries, GameFetcher, MoveFetcher, TypeFetcher};
 use crate::api::once::api_client;
 use crate::api::utils::{self, capture_gen_url, get_all_game_data};
-use crate::api::{get_all_ability_rows, get_all_game_rows, get_all_move_rows, get_all_type_rows};
-use crate::models::resource::{
-    AbilityRow, GameRow, InsertRow, MoveChangeRow, MoveRow, TypeChangeRow, TypeRow,
-};
+use crate::models::resource::InsertRow;
 use crate::models::Game;
 
 use std::collections::HashMap;
@@ -339,17 +337,22 @@ impl DatabaseFile {
 
     pub async fn build_db(&self) -> Result<()> {
         self.create_schema()?;
+
         println!("retrieving games");
-        self.populate_games().await?;
+        let games = GameFetcher::fetch_all_entries(api_client(), &self.db).await?;
+        self.populate_table(games)?;
 
         println!("retrieving moves");
-        self.populate_moves().await?;
+        let moves = MoveFetcher::fetch_all_entries(api_client(), &self.db).await?;
+        self.populate_table(moves)?;
 
         println!("retrieving types");
-        self.populate_types().await?;
+        let types = TypeFetcher::fetch_all_entries(api_client(), &self.db).await?;
+        self.populate_table(types)?;
 
         println!("retrieving abilities");
-        self.populate_abilities().await?;
+        let abilities = AbilityFetcher::fetch_all_entries(api_client(), &self.db).await?;
+        self.populate_table(abilities)?;
 
         Ok(())
     }
@@ -358,52 +361,9 @@ impl DatabaseFile {
         self.db.execute_batch(include_str!("sql/create_schema.sql"))
     }
 
-    async fn populate_games(&self) -> Result<()> {
-        let games = get_all_game_rows(api_client()).await?;
-        let mut statement = GameRow::insert_stmt(&self.db)?;
-        for game in games {
-            game.insert(&mut statement)?;
-        }
-        Ok(())
-    }
-
-    async fn populate_moves(&self) -> Result<()> {
-        let (moves, move_changes) = get_all_move_rows(api_client(), &self.db).await?;
-
-        let mut insert_move = MoveRow::insert_stmt(&self.db)?;
-        for move_ in moves {
-            move_.insert(&mut insert_move)?;
-        }
-
-        let mut insert_move_changes = MoveChangeRow::insert_stmt(&self.db)?;
-        for change in move_changes {
-            change.insert(&mut insert_move_changes)?;
-        }
-
-        Ok(())
-    }
-
-    async fn populate_types(&self) -> Result<()> {
-        let (types, type_changes) = get_all_type_rows(api_client(), &self.db).await?;
-
-        let mut insert_type = TypeRow::insert_stmt(&self.db)?;
-        for type_ in types {
-            type_.insert(&mut insert_type)?;
-        }
-
-        let mut insert_type_changes = TypeChangeRow::insert_stmt(&self.db)?;
-        for change in type_changes {
-            change.insert(&mut insert_type_changes)?;
-        }
-
-        Ok(())
-    }
-
-    async fn populate_abilities(&self) -> Result<()> {
-        let abilities = get_all_ability_rows(api_client()).await?;
-        let mut statement = AbilityRow::insert_stmt(&self.db)?;
-        for ability in abilities {
-            ability.insert(&mut statement)?;
+    fn populate_table(&self, entries: Vec<impl InsertRow>) -> Result<()> {
+        for entry in entries {
+            entry.insert(&self.db)?;
         }
         Ok(())
     }

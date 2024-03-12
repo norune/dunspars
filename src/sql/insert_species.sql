@@ -1,0 +1,1 @@
+INSERT INTO species ([id], [name], [type], [evolution_id]) VALUES (?1, ?2, ?3, ?4);
