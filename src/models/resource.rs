@@ -324,8 +324,8 @@ impl InsertRow for AbilityRow {
 }
 
 pub struct EvolutionRow {
-    id: i64,
-    evolution: String,
+    pub id: i64,
+    pub evolution: String,
 }
 impl TableRow for EvolutionRow {
     fn table() -> &'static str {
@@ -340,10 +340,12 @@ impl InsertRow for EvolutionRow {
 }
 
 pub struct SpeciesRow {
-    id: i64,
-    name: String,
-    type_: String,
-    evolution_id: i64,
+    pub id: i64,
+    pub name: String,
+    pub is_baby: bool,
+    pub is_legendary: bool,
+    pub is_mythical: bool,
+    pub evolution_id: Option<i64>,
 }
 impl TableRow for SpeciesRow {
     fn table() -> &'static str {
@@ -353,21 +355,28 @@ impl TableRow for SpeciesRow {
 impl InsertRow for SpeciesRow {
     fn insert(&self, db: &Connection) -> SqlResult<usize> {
         let mut statement = db.prepare_cached(include_str!("../sql/insert_species.sql"))?;
-        statement.execute(params![self.id, self.name, self.type_, self.evolution_id,])
+        statement.execute(params![
+            self.id,
+            self.name,
+            self.is_baby,
+            self.is_legendary,
+            self.is_mythical,
+            self.evolution_id,
+        ])
     }
 }
 
 pub struct PokemonRow {
-    id: i64,
-    name: String,
-    primary_type: String,
-    secondary_type: Option<String>,
-    attack: i64,
-    defense: i64,
-    special_attack: i64,
-    special_defense: i64,
-    speed: i64,
-    species_id: i64,
+    pub id: i64,
+    pub name: String,
+    pub primary_type: String,
+    pub secondary_type: Option<String>,
+    pub attack: i64,
+    pub defense: i64,
+    pub special_attack: i64,
+    pub special_defense: i64,
+    pub speed: i64,
+    pub species_id: i64,
 }
 impl TableRow for PokemonRow {
     fn table() -> &'static str {
@@ -393,12 +402,12 @@ impl InsertRow for PokemonRow {
 }
 
 pub struct PokemonMoveRow {
-    id: i64,
-    name: String,
-    learn_method: String,
-    learn_level: i64,
-    generation: u8,
-    pokemon_id: i64,
+    pub id: Option<i64>,
+    pub name: String,
+    pub learn_method: String,
+    pub learn_level: i64,
+    pub generation: u8,
+    pub pokemon_id: i64,
 }
 impl TableRow for PokemonMoveRow {
     fn table() -> &'static str {
@@ -420,10 +429,11 @@ impl InsertRow for PokemonMoveRow {
 }
 
 pub struct PokemonAbilityRow {
-    id: i64,
-    name: String,
-    hidden: bool,
-    pokemon_id: i64,
+    pub id: Option<i64>,
+    pub name: String,
+    pub is_hidden: bool,
+    pub slot: i64,
+    pub pokemon_id: i64,
 }
 impl TableRow for PokemonAbilityRow {
     fn table() -> &'static str {
@@ -433,16 +443,22 @@ impl TableRow for PokemonAbilityRow {
 impl InsertRow for PokemonAbilityRow {
     fn insert(&self, db: &Connection) -> SqlResult<usize> {
         let mut statement = db.prepare_cached(include_str!("../sql/insert_pokemon_ability.sql"))?;
-        statement.execute(params![self.id, self.name, self.hidden, self.pokemon_id,])
+        statement.execute(params![
+            self.id,
+            self.name,
+            self.is_hidden,
+            self.slot,
+            self.pokemon_id,
+        ])
     }
 }
 
 pub struct PokemonTypeChangeRow {
-    id: i64,
-    primary_type: String,
-    secondary_type: Option<String>,
-    generation: u8,
-    pokemon_id: i64,
+    pub id: Option<i64>,
+    pub primary_type: String,
+    pub secondary_type: Option<String>,
+    pub generation: u8,
+    pub pokemon_id: i64,
 }
 impl TableRow for PokemonTypeChangeRow {
     fn table() -> &'static str {
@@ -460,5 +476,22 @@ impl InsertRow for PokemonTypeChangeRow {
             self.generation,
             self.pokemon_id,
         ])
+    }
+}
+
+pub enum PokemonRowGroup {
+    PokemonRow(PokemonRow),
+    PokemonMoveRow(PokemonMoveRow),
+    PokemonAbilityRow(PokemonAbilityRow),
+    PokemonTypeChangeRow(PokemonTypeChangeRow),
+}
+impl InsertRow for PokemonRowGroup {
+    fn insert(&self, db: &Connection) -> SqlResult<usize> {
+        match self {
+            PokemonRowGroup::PokemonRow(row) => row.insert(db),
+            PokemonRowGroup::PokemonMoveRow(row) => row.insert(db),
+            PokemonRowGroup::PokemonAbilityRow(row) => row.insert(db),
+            PokemonRowGroup::PokemonTypeChangeRow(row) => row.insert(db),
+        }
     }
 }

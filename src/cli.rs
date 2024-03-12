@@ -1,8 +1,8 @@
 mod display;
 mod utils;
 
-use crate::api;
-use crate::api::once::{api_client, game_resource};
+use crate::api::api_client;
+use crate::api::once::game_resource;
 use crate::models::{Ability, Move, Pokemon, PokemonData, Type};
 use crate::resource::{
     AbilityResource, DatabaseFile, GameResourceFile, GetGeneration, MoveResource, PokemonResource,
@@ -91,12 +91,6 @@ enum Commands {
         #[arg(short, long)]
         delimiter: Option<String>,
     },
-    /// Reset program files
-    Reset {
-        /// Which program data to reset
-        #[arg(value_enum)]
-        type_: ResetType,
-    },
 }
 
 #[derive(Clone, clap::ValueEnum)]
@@ -161,7 +155,6 @@ pub async fn run() -> Result<()> {
             resource,
             delimiter,
         } => program.run_resource(resource, delimiter).await?,
-        Commands::Reset { type_ } => program.run_reset(type_).await?,
     }
 
     Ok(())
@@ -230,7 +223,7 @@ impl Program {
     }
 
     async fn run_pokemon(&self, name: String, moves: bool, evolution: bool) -> Result<String> {
-        let resource = PokemonResource::try_new(api_client()).await?;
+        let resource = PokemonResource::try_new(&api_client()).await?;
         let pokemon_name = resource.validate(&name)?;
 
         let pokemon = PokemonData::from_name(&pokemon_name, &self.config.game).await?;
@@ -286,7 +279,7 @@ impl Program {
     }
 
     async fn run_type(&self, name: String) -> Result<String> {
-        let resource = TypeResource::try_new(api_client()).await?;
+        let resource = TypeResource::try_new(&api_client()).await?;
         let type_name = resource.validate(&name)?;
 
         let Type {
@@ -325,7 +318,7 @@ impl Program {
         verbose: bool,
         stab_only: bool,
     ) -> Result<String> {
-        let resource = PokemonResource::try_new(api_client()).await?;
+        let resource = PokemonResource::try_new(&api_client()).await?;
 
         let attacker_name = resource.validate(&attacker_name)?;
         let attacker_data = PokemonData::from_name(&attacker_name, &self.config.game).await?;
@@ -369,7 +362,7 @@ impl Program {
     }
 
     async fn run_coverage(&self, names: Vec<String>) -> Result<String> {
-        let resource = PokemonResource::try_new(api_client()).await?;
+        let resource = PokemonResource::try_new(&api_client()).await?;
         let mut pokemon = vec![];
 
         for name in names {
@@ -396,7 +389,7 @@ impl Program {
     }
 
     async fn run_move(&self, name: String) -> Result<String> {
-        let resource = MoveResource::try_new(api_client()).await?;
+        let resource = MoveResource::try_new(&api_client()).await?;
         let move_name = resource.validate(&name)?;
 
         let move_ = Move::from_name(&move_name, self.config.generation, &self.db_file.db)?;
@@ -412,7 +405,7 @@ impl Program {
     }
 
     async fn run_ability(&self, name: String) -> Result<String> {
-        let resource = AbilityResource::try_new(api_client()).await?;
+        let resource = AbilityResource::try_new(&api_client()).await?;
         let ability_name = resource.validate(&name)?;
 
         let ability = Ability::from_name(&ability_name, self.config.generation, &self.db_file.db)?;
@@ -429,20 +422,21 @@ impl Program {
 
     async fn run_resource(&self, resource: ResourceArgs, delimiter: Option<String>) -> Result<()> {
         let delimiter = delimiter.unwrap_or("\n".to_string());
+        let client = api_client();
         let resource = match resource {
-            ResourceArgs::Pokemon => PokemonResource::try_new(api_client())
+            ResourceArgs::Pokemon => PokemonResource::try_new(&client)
                 .await?
                 .resource()
                 .join(&delimiter),
-            ResourceArgs::Moves => MoveResource::try_new(api_client())
+            ResourceArgs::Moves => MoveResource::try_new(&client)
                 .await?
                 .resource()
                 .join(&delimiter),
-            ResourceArgs::Abilities => AbilityResource::try_new(api_client())
+            ResourceArgs::Abilities => AbilityResource::try_new(&client)
                 .await?
                 .resource()
                 .join(&delimiter),
-            ResourceArgs::Types => TypeResource::try_new(api_client())
+            ResourceArgs::Types => TypeResource::try_new(&client)
                 .await?
                 .resource()
                 .join(&delimiter),
@@ -456,17 +450,6 @@ impl Program {
         };
 
         Ok(())
-    }
-
-    async fn run_reset(&self, action: ResetType) -> Result<()> {
-        match action {
-            ResetType::Cache => api::clear_cache().await,
-            ResetType::Data => {
-                let game_writer = GameResourceFile::try_new()?;
-                game_writer.build_if_missing(true).await?;
-                Ok(())
-            }
-        }
     }
 
     async fn run_setup(&self) -> Result<()> {

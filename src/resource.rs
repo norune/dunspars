@@ -1,10 +1,13 @@
-use crate::api::convert::{AbilityFetcher, FetchAllEntries, GameFetcher, MoveFetcher, TypeFetcher};
-use crate::api::once::api_client;
+use crate::api::api_client;
+use crate::api::convert::{
+    AbilityFetcher, EvolutionFetcher, FetchEntries, FetchIdentifiers, GameFetcher, MoveFetcher,
+    PokemonFetcher, SpeciesFetcher, TypeFetcher,
+};
 use crate::api::utils::{self, capture_gen_url, get_all_game_data};
 use crate::models::resource::InsertRow;
 use crate::models::Game;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -319,6 +322,7 @@ fn path_exists(path: &Path) -> bool {
 
 pub struct DatabaseFile {
     pub db: Connection,
+    api_client: RustemonClient,
     path: PathBuf,
 }
 impl DatabaseFile {
@@ -331,28 +335,68 @@ impl DatabaseFile {
         }
 
         let db = Connection::open(&path)?;
+        let api_client = api_client();
 
-        Ok(Self { path, db })
+        Ok(Self {
+            path,
+            db,
+            api_client,
+        })
     }
 
     pub async fn build_db(&self) -> Result<()> {
         self.create_schema()?;
 
         println!("retrieving games");
-        let games = GameFetcher::fetch_all_entries(api_client(), &self.db).await?;
+        let game_names = GameFetcher::fetch_all_identifiers(&self.api_client).await?;
+        let games = GameFetcher::fetch_all_entries(game_names, &self.api_client, &self.db).await?;
         self.populate_table(games)?;
 
         println!("retrieving moves");
-        let moves = MoveFetcher::fetch_all_entries(api_client(), &self.db).await?;
+        let move_names = MoveFetcher::fetch_all_identifiers(&self.api_client).await?;
+        let moves = MoveFetcher::fetch_all_entries(move_names, &self.api_client, &self.db).await?;
         self.populate_table(moves)?;
 
         println!("retrieving types");
-        let types = TypeFetcher::fetch_all_entries(api_client(), &self.db).await?;
+        let type_names = TypeFetcher::fetch_all_identifiers(&self.api_client).await?;
+        let types = TypeFetcher::fetch_all_entries(type_names, &self.api_client, &self.db).await?;
         self.populate_table(types)?;
 
         println!("retrieving abilities");
-        let abilities = AbilityFetcher::fetch_all_entries(api_client(), &self.db).await?;
+        let ability_names = AbilityFetcher::fetch_all_identifiers(&self.api_client).await?;
+        let abilities =
+            AbilityFetcher::fetch_all_entries(ability_names, &self.api_client, &self.db).await?;
         self.populate_table(abilities)?;
+
+        println!("retrieving species");
+        let species_names = SpeciesFetcher::fetch_all_identifiers(&self.api_client).await?;
+        let species =
+            SpeciesFetcher::fetch_all_entries(species_names, &self.api_client, &self.db).await?;
+
+        // rustemon::evolution::evolution_chain::get_all_entries() is broken.
+        // Retrieve them instead via references from 'pokemon-species' endpoint.
+        let mut evolution_ids = HashSet::new();
+        species.iter().for_each(|s| {
+            if let Some(evolution_id) = s.evolution_id {
+                evolution_ids.insert(evolution_id);
+            }
+        });
+        self.populate_table(species)?;
+
+        println!("retrieving evolution");
+        let evolutions = EvolutionFetcher::fetch_all_entries(
+            evolution_ids.into_iter().collect(),
+            &self.api_client,
+            &self.db,
+        )
+        .await?;
+        self.populate_table(evolutions)?;
+
+        println!("retrieving pokemon");
+        let pokemon_names = PokemonFetcher::fetch_all_identifiers(&self.api_client).await?;
+        let pokemon =
+            PokemonFetcher::fetch_all_entries(pokemon_names, &self.api_client, &self.db).await?;
+        self.populate_table(pokemon)?;
 
         Ok(())
     }

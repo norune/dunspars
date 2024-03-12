@@ -13,8 +13,10 @@ CREATE TABLE evolutions (
 CREATE TABLE species (
     [id] INTEGER PRIMARY KEY,
     [name] TEXT NOT NULL,
-    [type] TEXT NOT NULL,
-    [evolution_id] INTEGER NOT NULL,
+    [is_baby] BOOLEAN NOT NULL,
+    [is_legendary] BOOLEAN NOT NULL,
+    [is_mythical] BOOLEAN NOT NULL,
+    [evolution_id] INTEGER,
     FOREIGN KEY([evolution_id]) REFERENCES evolutions([id])
 );
 
@@ -45,7 +47,8 @@ CREATE TABLE pokemon_moves (
 CREATE TABLE pokemon_abilities (
     [id] INTEGER PRIMARY KEY,
     [name] TEXT NOT NULL,
-    [hidden] BOOLEAN NOT NULL,
+    [is_hidden] BOOLEAN NOT NULL,
+    [slot] INTEGER NOT NULL,
     [pokemon_id] INTEGER NOT NULL,
     FOREIGN KEY([pokemon_id]) REFERENCES pokemon([id])
 );

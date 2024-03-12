@@ -4,12 +4,12 @@ pub mod utils;
 
 use crate::models::{EvolutionStep, PokemonData, PokemonGroup, Stats};
 use crate::resource::{GameResource, GetGeneration};
-use once::{api_client, cache_manager, game_resource};
+use once::game_resource;
 
 use std::collections::HashMap;
 
-use anyhow::{anyhow, bail, Result};
-use rustemon::client::RustemonClient;
+use anyhow::{bail, Result};
+use rustemon::client::{CacheMode, RustemonClient, RustemonClientBuilder};
 use rustemon::pokemon::pokemon as rustemon_pokemon;
 use rustemon::pokemon::pokemon_species as rustemon_species;
 use rustemon::Follow;
@@ -21,8 +21,18 @@ use rustemon::model::pokemon::{
     PokemonType as RustemonTypeSlot, PokemonTypePast as RustemonPastPokemonType,
 };
 
+pub fn api_client() -> RustemonClient {
+    // This disregards cache staleness. Pokémon data is not likely to change
+    // Cache should be cleared by user via program command
+    let cache_mode = CacheMode::ForceCache;
+    RustemonClientBuilder::default()
+        .with_mode(cache_mode)
+        .try_build()
+        .unwrap()
+}
+
 pub async fn get_evolution(species: &str) -> Result<EvolutionStep> {
-    rustemon_evolution(species, api_client()).await
+    rustemon_evolution(species, &api_client()).await
 }
 async fn rustemon_evolution(species: &str, client: &RustemonClient) -> Result<EvolutionStep> {
     let RustemonEvoRoot { chain, .. } = rustemon_species::get_by_name(species, client)
@@ -37,7 +47,7 @@ async fn rustemon_evolution(species: &str, client: &RustemonClient) -> Result<Ev
 }
 
 pub async fn get_pokemon(pokemon_name: &str, game: &str) -> Result<PokemonData> {
-    rustemon_pokemon(pokemon_name, game, api_client(), game_resource()).await
+    rustemon_pokemon(pokemon_name, game, &api_client(), game_resource()).await
 }
 pub async fn rustemon_pokemon(
     pokemon_name: &str,
@@ -157,13 +167,6 @@ async fn get_pokemon_group(species: &str, client: &RustemonClient) -> Result<Pok
     }
 
     Ok(PokemonGroup::Regular)
-}
-
-pub async fn clear_cache() -> Result<()> {
-    match cache_manager().clear().await {
-        std::result::Result::Ok(_) => Ok(()),
-        std::result::Result::Err(e) => Err(anyhow!(e)),
-    }
 }
 
 #[cfg(test)]

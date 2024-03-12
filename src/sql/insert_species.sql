@@ -1,1 +1,1 @@
-INSERT INTO species ([id], [name], [type], [evolution_id]) VALUES (?1, ?2, ?3, ?4);
+INSERT INTO species ([id], [name], [is_baby], [is_legendary], [is_mythical], [evolution_id]) VALUES (?1, ?2, ?3, ?4, ?5, ?6);

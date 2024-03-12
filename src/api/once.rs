@@ -1,31 +1,6 @@
-use crate::resource::{app_directory_cache, GameResource};
-
-use std::sync::OnceLock;
-
+use crate::resource::GameResource;
 use regex::Regex;
-use rustemon::client::{CACacheManager, CacheMode, RustemonClient, RustemonClientBuilder};
-
-pub fn cache_manager() -> &'static CACacheManager {
-    static CACHE_MANAGER: OnceLock<CACacheManager> = OnceLock::new();
-    CACHE_MANAGER.get_or_init(|| {
-        let cache_dir = app_directory_cache("rustemon");
-        CACacheManager { path: cache_dir }
-    })
-}
-
-pub fn api_client() -> &'static RustemonClient {
-    static API_CLIENT: OnceLock<RustemonClient> = OnceLock::new();
-    API_CLIENT.get_or_init(|| {
-        // This disregards cache staleness. Pokémon data is not likely to change
-        // Cache should be cleared by user via program command
-        let cache_mode = CacheMode::ForceCache;
-        RustemonClientBuilder::default()
-            .with_manager(cache_manager().clone())
-            .with_mode(cache_mode)
-            .try_build()
-            .unwrap()
-    })
-}
+use std::sync::OnceLock;
 
 pub fn game_resource() -> &'static GameResource {
     static GAME_RESOURCE: OnceLock<GameResource> = OnceLock::new();

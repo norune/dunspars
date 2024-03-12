@@ -1,7 +1,6 @@
-use super::once::{api_client, gen_url_regex};
-use crate::models::{
-    DefenseTypeChart, EvolutionMethod, EvolutionStep, Game, NewTypeChart, OffenseTypeChart, Stats,
-};
+use super::api_client;
+use super::once::gen_url_regex;
+use crate::models::{DefenseTypeChart, Game, NewTypeChart, OffenseTypeChart, Stats};
 use crate::resource::GetGeneration;
 
 use std::collections::HashMap;
@@ -17,9 +16,6 @@ use rustemon::pokemon::{
     ability as rustemon_ability, pokemon as rustemon_pokemon, type_ as rustemon_type,
 };
 
-use rustemon::model::evolution::{
-    ChainLink as RustemonEvoStep, EvolutionDetail as RustemonEvoMethod,
-};
 use rustemon::model::moves::PastMoveStatValues as RustemonPastMoveStats;
 use rustemon::model::pokemon::{
     AbilityEffectChange as RustemonPastAbilityEffect, PokemonStat as RustemonStat,
@@ -133,10 +129,11 @@ pub async fn get_all_games(client: &RustemonClient) -> Result<Vec<String>> {
 }
 
 pub async fn get_all_game_data() -> Result<Vec<Game>> {
-    let game_names = get_all_games(api_client()).await?;
+    let client = api_client();
+    let game_names = get_all_games(&client).await?;
     let game_data_futures: FuturesOrdered<_> = game_names
         .iter()
-        .map(|g| rustemon_version::get_by_name(g, api_client()))
+        .map(|g| rustemon_version::get_by_name(g, &client))
         .collect();
     let game_results: Vec<_> = game_data_futures.collect().await;
     let mut game_data = vec![];
@@ -157,87 +154,6 @@ pub fn capture_gen_url(url: &str) -> Result<u8> {
         Ok(caps["gen"].parse::<u8>()?)
     } else {
         Err(anyhow!("Generation not found in resource url"))
-    }
-}
-
-impl From<RustemonEvoStep> for EvolutionStep {
-    fn from(chain_link: RustemonEvoStep) -> Self {
-        let evolution_methods = chain_link
-            .evolution_details
-            .into_iter()
-            .map(EvolutionMethod::from)
-            .collect();
-
-        if !chain_link.evolves_to.is_empty() {
-            let evolves_to = chain_link
-                .evolves_to
-                .into_iter()
-                .map(EvolutionStep::from)
-                .collect();
-
-            EvolutionStep::new(chain_link.species.name, evolution_methods, evolves_to)
-        } else {
-            EvolutionStep::new(chain_link.species.name, evolution_methods, vec![])
-        }
-    }
-}
-
-impl From<RustemonEvoMethod> for EvolutionMethod {
-    fn from(evolution: RustemonEvoMethod) -> Self {
-        let mut method = EvolutionMethod::new(evolution.trigger.name);
-        if let Some(item) = evolution.item {
-            method = method.item(item.name);
-        }
-        if let Some(gender) = evolution.gender {
-            method = method.gender(gender);
-        }
-        if let Some(held_item) = evolution.held_item {
-            method = method.held_item(held_item.name);
-        }
-        if let Some(known_move) = evolution.known_move {
-            method = method.known_move(known_move.name);
-        }
-        if let Some(known_move_type) = evolution.known_move_type {
-            method = method.known_move_type(known_move_type.name);
-        }
-        if let Some(location) = evolution.location {
-            method = method.location(location.name);
-        }
-        if let Some(min_level) = evolution.min_level {
-            method = method.min_level(min_level);
-        }
-        if let Some(min_happiness) = evolution.min_happiness {
-            method = method.min_happiness(min_happiness);
-        }
-        if let Some(min_beauty) = evolution.min_beauty {
-            method = method.min_beauty(min_beauty);
-        }
-        if let Some(min_affection) = evolution.min_affection {
-            method = method.min_affection(min_affection);
-        }
-        if let Some(party_species) = evolution.party_species {
-            method = method.party_species(party_species.name);
-        }
-        if let Some(party_type) = evolution.party_type {
-            method = method.party_type(party_type.name);
-        }
-        if let Some(relative_physical_stats) = evolution.relative_physical_stats {
-            method = method.relative_physical_stats(relative_physical_stats);
-        }
-        if let Some(trade_species) = evolution.trade_species {
-            method = method.trade_species(trade_species.name);
-        }
-        if evolution.needs_overworld_rain {
-            method = method.needs_overworld_rain(true);
-        }
-        if evolution.turn_upside_down {
-            method = method.turn_upside_down(true);
-        }
-        if !evolution.time_of_day.is_empty() {
-            method = method.time_of_day(evolution.time_of_day);
-        }
-
-        method
     }
 }
 
