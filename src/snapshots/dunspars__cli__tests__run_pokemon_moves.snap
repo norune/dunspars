@@ -6,7 +6,7 @@ blaziken fire fighting
 blaze speed-boost(h)
 hp    atk   def   satk  sdef  spd   total
 80    120   70    110   70    80    530   
-scarlet-violet gen-9
+gen-9
 
 fire fighting defense
 double: flying ground psychic water
@@ -42,12 +42,15 @@ reversal(s)          fighting physical   power: N/A  accuracy: 100  pp: 15    le
 flare-blitz(s)       fire physical       power: 120  accuracy: 100  pp: 15    level-up 56
 brave-bird           flying physical     power: 120  accuracy: 100  pp: 15    level-up 63
 acrobatics           flying physical     power: 55   accuracy: 100  pp: 15    machine 
+aerial-ace           flying physical     power: 60   accuracy: N/A  pp: 20    machine 
 agility              psychic status      power: N/A  accuracy: N/A  pp: 30    machine 
 aura-sphere(s)       fighting special    power: 80   accuracy: N/A  pp: 20    machine 
 baton-pass           normal status       power: N/A  accuracy: N/A  pp: 40    machine 
 blast-burn(s)        fire special        power: 150  accuracy: 90   pp: 5     machine 
 body-slam            normal physical     power: 85   accuracy: 100  pp: 15    machine 
+brave-bird           flying physical     power: 120  accuracy: 100  pp: 15    machine 
 brick-break(s)       fighting physical   power: 75   accuracy: 100  pp: 15    machine 
+bulk-up(s)           fighting status     power: N/A  accuracy: N/A  pp: 20    machine 
 bulldoze             ground physical     power: 60   accuracy: 100  pp: 20    machine 
 close-combat(s)      fighting physical   power: 120  accuracy: 100  pp: 5     machine 
 coaching(s)          fighting status     power: N/A  accuracy: N/A  pp: 10    machine 
@@ -57,9 +60,14 @@ double-edge          normal physical     power: 120  accuracy: 100  pp: 15    ma
 earthquake           ground physical     power: 100  accuracy: 100  pp: 10    machine 
 endure               normal status       power: N/A  accuracy: N/A  pp: 10    machine 
 facade               normal physical     power: 70   accuracy: 100  pp: 20    machine 
+feather-dance        flying status       power: N/A  accuracy: 100  pp: 15    machine 
 fire-blast(s)        fire special        power: 110  accuracy: 85   pp: 5     machine 
 fire-pledge(s)       fire special        power: 80   accuracy: 100  pp: 10    machine 
+fire-punch(s)        fire physical       power: 75   accuracy: 100  pp: 15    machine 
 fire-spin(s)         fire special        power: 35   accuracy: 85   pp: 15    machine 
+flame-charge(s)      fire physical       power: 50   accuracy: 100  pp: 20    machine 
+flamethrower(s)      fire special        power: 90   accuracy: 100  pp: 15    machine 
+flare-blitz(s)       fire physical       power: 120  accuracy: 100  pp: 15    machine 
 fling                dark physical       power: N/A  accuracy: 100  pp: 10    machine 
 focus-blast(s)       fighting special    power: 120  accuracy: 70   pp: 5     machine 
 focus-punch(s)       fighting physical   power: 150  accuracy: 100  pp: 20    machine 
@@ -76,6 +84,7 @@ overheat(s)          fire special        power: 130  accuracy: 90   pp: 5     ma
 poison-jab           poison physical     power: 80   accuracy: 100  pp: 20    machine 
 protect              normal status       power: N/A  accuracy: N/A  pp: 10    machine 
 rest                 psychic status      power: N/A  accuracy: N/A  pp: 5     machine 
+reversal(s)          fighting physical   power: N/A  accuracy: 100  pp: 15    machine 
 roar                 normal status       power: N/A  accuracy: N/A  pp: 20    machine 
 rock-slide           rock physical       power: 75   accuracy: 90   pp: 10    machine 
 rock-tomb            rock physical       power: 60   accuracy: 95   pp: 15    machine 

@@ -1,25 +1,33 @@
-pub mod convert;
-pub mod once;
-pub mod utils;
+mod convert;
 
-use crate::models::{EvolutionStep, PokemonData, PokemonGroup, Stats};
-use crate::resource::{GameResource, GetGeneration};
-use once::game_resource;
+use crate::models::resource::{
+    AbilityRow, EvolutionRow, GameRow, MoveChangeRow, MoveRow, MoveRowGroup, PokemonAbilityRow,
+    PokemonMoveRow, PokemonRow, PokemonRowGroup, PokemonTypeChangeRow, SelectRow, SpeciesRow,
+    TypeChangeRow, TypeRow, TypeRowGroup,
+};
+use crate::models::EvolutionStep;
+use convert::FromChange;
 
-use std::collections::HashMap;
+use std::collections::HashSet;
 
-use anyhow::{bail, Result};
-use rustemon::client::{CacheMode, RustemonClient, RustemonClientBuilder};
+use anyhow::Result;
+use futures::stream::FuturesUnordered;
+use futures::StreamExt;
+use rusqlite::Connection;
+
+use rustemon::evolution::evolution_chain as rustemon_evolution;
+use rustemon::games::version_group as rustemon_version;
+use rustemon::moves::move_ as rustemon_move;
+use rustemon::pokemon::ability as rustemon_ability;
 use rustemon::pokemon::pokemon as rustemon_pokemon;
 use rustemon::pokemon::pokemon_species as rustemon_species;
-use rustemon::Follow;
+use rustemon::pokemon::type_ as rustemon_type;
 
-use rustemon::model::evolution::EvolutionChain as RustemonEvoRoot;
-use rustemon::model::pokemon::{
-    Pokemon as RustemonPokemon, PokemonAbility as RustemonPokemonAbility,
-    PokemonMove as RustemonPokemonMove, PokemonSpecies as RustemonSpecies,
-    PokemonType as RustemonTypeSlot, PokemonTypePast as RustemonPastPokemonType,
-};
+use rustemon::client::{CacheMode, RustemonClient, RustemonClientBuilder};
+use rustemon::model::evolution::EvolutionChain;
+use rustemon::model::games::VersionGroup;
+use rustemon::model::moves::Move;
+use rustemon::model::pokemon::{Ability, Pokemon, PokemonSpecies, Type};
 
 pub fn api_client() -> RustemonClient {
     // This disregards cache staleness. Pokémon data is not likely to change
@@ -31,188 +39,283 @@ pub fn api_client() -> RustemonClient {
         .unwrap()
 }
 
-pub async fn get_evolution(species: &str) -> Result<EvolutionStep> {
-    rustemon_evolution(species, &api_client()).await
-}
-async fn rustemon_evolution(species: &str, client: &RustemonClient) -> Result<EvolutionStep> {
-    let RustemonEvoRoot { chain, .. } = rustemon_species::get_by_name(species, client)
-        .await?
-        .evolution_chain
-        .unwrap()
-        .follow(client)
-        .await?;
-    let evolution_step = EvolutionStep::from(chain);
-
-    Ok(evolution_step)
+pub fn game_to_gen(game: &str, db: &Connection) -> u8 {
+    let game = GameRow::select_by_name(game, db).unwrap();
+    game.generation
 }
 
-pub async fn get_pokemon(pokemon_name: &str, game: &str) -> Result<PokemonData> {
-    rustemon_pokemon(pokemon_name, game, &api_client(), game_resource()).await
+#[allow(async_fn_in_trait)]
+pub trait FetchIdentifiers<I> {
+    async fn fetch_all_identifiers(client: &RustemonClient) -> Result<Vec<I>>;
 }
-pub async fn rustemon_pokemon(
-    pokemon_name: &str,
-    game: &str,
-    client: &RustemonClient,
-    game_resource: &GameResource,
-) -> Result<PokemonData> {
-    let RustemonPokemon {
-        name,
-        types,
-        past_types,
-        moves,
-        stats,
-        abilities,
-        species,
-        ..
-    } = rustemon_pokemon::get_by_name(pokemon_name, client).await?;
 
-    let current_generation = game_resource.get_gen(game);
-    let learn_moves = get_pokemon_moves(moves, current_generation, game_resource);
-    // PokéAPI doesn't seem to supply a field that denotes when a Pokémon was introduced.
-    // So the next best thing is to check if they have any moves in the specified generation.
-    if learn_moves.is_empty() {
-        bail!(format!(
-            "Pokémon '{pokemon_name}' is not present in generation {current_generation}"
-        ))
+#[allow(async_fn_in_trait)]
+pub trait FetchEntries<I, E> {
+    async fn fetch_all_entries(identifiers: Vec<I>, client: &RustemonClient) -> Result<Vec<E>> {
+        // Entry retrieval needs to be done in chunks because sending too many TCP requests
+        // concurrently can cause "tcp open error: Too many open files (os error 24)"
+        let chunked_identifiers = identifiers.chunks(200);
+        let mut entries = vec![];
+
+        for chunk in chunked_identifiers {
+            let entry_futures: FuturesUnordered<_> = chunk
+                .iter()
+                .map(|identifier| Self::fetch_entry(identifier, client))
+                .collect();
+            let entry_results: Vec<_> = entry_futures.collect().await;
+            for entry in entry_results {
+                entries.push(entry?);
+            }
+        }
+
+        Ok(entries)
     }
-
-    let (primary_type, secondary_type) =
-        get_pokemon_type(types, past_types, current_generation, game_resource);
-    let abilities = get_pokemon_abilities(abilities);
-
-    let group = get_pokemon_group(&species.name, client).await?;
-
-    Ok(PokemonData {
-        name,
-        primary_type,
-        secondary_type,
-        learn_moves,
-        abilities,
-        species: species.name,
-        group,
-        stats: Stats::from(stats),
-        game: game.to_string(),
-        generation: current_generation,
-    })
+    async fn fetch_entry(identifier: &I, client: &RustemonClient) -> Result<E>;
 }
 
-fn get_pokemon_type(
-    types: Vec<RustemonTypeSlot>,
-    past_types: Vec<RustemonPastPokemonType>,
-    generation: u8,
-    game_resource: &GameResource,
-) -> (String, Option<String>) {
-    let pokemon_types = utils::match_past(generation, &past_types, game_resource).unwrap_or(types);
-
-    let primary_type = pokemon_types
-        .iter()
-        .find(|t| t.slot == 1)
-        .unwrap()
-        .type_
-        .name
-        .clone();
-    let secondary_type = pokemon_types
-        .iter()
-        .find(|t| t.slot == 2)
-        .map(|t| t.type_.name.clone());
-
-    (primary_type, secondary_type)
+pub trait ConvertEntries<E, R> {
+    fn convert_to_rows(entries: Vec<E>, db: &Connection) -> Vec<R>;
 }
 
-fn get_pokemon_moves(
-    moves: Vec<RustemonPokemonMove>,
-    generation: u8,
-    game_resource: &GameResource,
-) -> HashMap<String, (String, i64)> {
-    let mut learn_moves = HashMap::new();
-    for move_ in moves {
-        let learnable_move = move_.version_group_details.iter().find(|vg| {
-            let vg_gen = game_resource.get_gen(&vg.version_group.name);
-            vg_gen == generation
+#[allow(async_fn_in_trait)]
+pub trait FetchResource<I, E, R>:
+    FetchIdentifiers<I> + FetchEntries<I, E> + ConvertEntries<E, R>
+{
+    async fn fetch_resource(client: &RustemonClient, db: &Connection) -> Result<Vec<R>> {
+        let names = Self::fetch_all_identifiers(client).await?;
+        let entries = Self::fetch_all_entries(names, client).await?;
+        Ok(Self::convert_to_rows(entries, db))
+    }
+}
+
+pub struct GameFetcher;
+impl FetchIdentifiers<String> for GameFetcher {
+    async fn fetch_all_identifiers(client: &RustemonClient) -> Result<Vec<String>> {
+        Ok(rustemon_version::get_all_entries(client)
+            .await?
+            .into_iter()
+            .map(|g| g.name)
+            .collect::<Vec<String>>())
+    }
+}
+impl FetchEntries<String, VersionGroup> for GameFetcher {
+    async fn fetch_entry(identifier: &String, client: &RustemonClient) -> Result<VersionGroup> {
+        Ok(rustemon_version::get_by_name(identifier, client).await?)
+    }
+}
+impl ConvertEntries<VersionGroup, GameRow> for GameFetcher {
+    fn convert_to_rows(entries: Vec<VersionGroup>, _db: &Connection) -> Vec<GameRow> {
+        entries
+            .into_iter()
+            .map(GameRow::from)
+            .collect::<Vec<GameRow>>()
+    }
+}
+impl FetchResource<String, VersionGroup, GameRow> for GameFetcher {}
+
+pub struct MoveFetcher;
+impl FetchIdentifiers<String> for MoveFetcher {
+    async fn fetch_all_identifiers(client: &RustemonClient) -> Result<Vec<String>> {
+        Ok(rustemon_move::get_all_entries(client)
+            .await?
+            .into_iter()
+            .map(|g| g.name)
+            .collect::<Vec<String>>())
+    }
+}
+impl FetchEntries<String, Move> for MoveFetcher {
+    async fn fetch_entry(identifier: &String, client: &RustemonClient) -> Result<Move> {
+        Ok(rustemon_move::get_by_name(identifier, client).await?)
+    }
+}
+impl ConvertEntries<Move, MoveRowGroup> for MoveFetcher {
+    fn convert_to_rows(entries: Vec<Move>, db: &Connection) -> Vec<MoveRowGroup> {
+        let mut move_data = vec![];
+
+        for move_ in entries {
+            for past_value in move_.past_values.iter() {
+                let change_move = MoveChangeRow::from_change(past_value, move_.id, db);
+                move_data.push(MoveRowGroup::MoveChangeRow(change_move));
+            }
+
+            let move_ = MoveRow::from(move_);
+            move_data.push(MoveRowGroup::MoveRow(move_));
+        }
+
+        move_data
+    }
+}
+impl FetchResource<String, Move, MoveRowGroup> for MoveFetcher {}
+
+pub struct TypeFetcher;
+impl FetchIdentifiers<String> for TypeFetcher {
+    async fn fetch_all_identifiers(client: &RustemonClient) -> Result<Vec<String>> {
+        Ok(rustemon_type::get_all_entries(client)
+            .await?
+            .into_iter()
+            .map(|g| g.name)
+            .collect::<Vec<String>>())
+    }
+}
+impl FetchEntries<String, Type> for TypeFetcher {
+    async fn fetch_entry(identifier: &String, client: &RustemonClient) -> Result<Type> {
+        Ok(rustemon_type::get_by_name(identifier, client).await?)
+    }
+}
+impl ConvertEntries<Type, TypeRowGroup> for TypeFetcher {
+    fn convert_to_rows(entries: Vec<Type>, db: &Connection) -> Vec<TypeRowGroup> {
+        let mut type_data = vec![];
+        for type_ in entries {
+            for past_type in type_.past_damage_relations.iter() {
+                let change_move = TypeChangeRow::from_change(past_type, type_.id, db);
+                type_data.push(TypeRowGroup::TypeChangeRow(change_move));
+            }
+
+            let move_ = TypeRow::from(type_);
+            type_data.push(TypeRowGroup::TypeRow(move_));
+        }
+        type_data
+    }
+}
+impl FetchResource<String, Type, TypeRowGroup> for TypeFetcher {}
+
+pub struct AbilityFetcher;
+impl FetchIdentifiers<String> for AbilityFetcher {
+    async fn fetch_all_identifiers(client: &RustemonClient) -> Result<Vec<String>> {
+        Ok(rustemon_ability::get_all_entries(client)
+            .await?
+            .into_iter()
+            .map(|g| g.name)
+            .collect::<Vec<String>>())
+    }
+}
+impl FetchEntries<String, Ability> for AbilityFetcher {
+    async fn fetch_entry(identifier: &String, client: &RustemonClient) -> Result<Ability> {
+        Ok(rustemon_ability::get_by_name(identifier, client).await?)
+    }
+}
+impl ConvertEntries<Ability, AbilityRow> for AbilityFetcher {
+    fn convert_to_rows(entries: Vec<Ability>, _db: &Connection) -> Vec<AbilityRow> {
+        entries
+            .into_iter()
+            .map(AbilityRow::from)
+            .collect::<Vec<AbilityRow>>()
+    }
+}
+impl FetchResource<String, Ability, AbilityRow> for AbilityFetcher {}
+
+pub struct SpeciesFetcher;
+impl FetchIdentifiers<String> for SpeciesFetcher {
+    async fn fetch_all_identifiers(client: &RustemonClient) -> Result<Vec<String>> {
+        Ok(rustemon_species::get_all_entries(client)
+            .await?
+            .into_iter()
+            .map(|g| g.name)
+            .collect::<Vec<String>>())
+    }
+}
+impl FetchEntries<String, PokemonSpecies> for SpeciesFetcher {
+    async fn fetch_entry(identifier: &String, client: &RustemonClient) -> Result<PokemonSpecies> {
+        Ok(rustemon_species::get_by_name(identifier, client).await?)
+    }
+}
+impl ConvertEntries<PokemonSpecies, SpeciesRow> for SpeciesFetcher {
+    fn convert_to_rows(entries: Vec<PokemonSpecies>, _db: &Connection) -> Vec<SpeciesRow> {
+        entries
+            .into_iter()
+            .map(SpeciesRow::from)
+            .collect::<Vec<SpeciesRow>>()
+    }
+}
+impl FetchResource<String, PokemonSpecies, SpeciesRow> for SpeciesFetcher {}
+
+pub struct EvolutionFetcher;
+impl FetchEntries<i64, EvolutionChain> for EvolutionFetcher {
+    async fn fetch_entry(identifier: &i64, client: &RustemonClient) -> Result<EvolutionChain> {
+        Ok(rustemon_evolution::get_by_id(*identifier, client).await?)
+    }
+}
+impl ConvertEntries<EvolutionChain, EvolutionRow> for EvolutionFetcher {
+    fn convert_to_rows(entries: Vec<EvolutionChain>, _db: &Connection) -> Vec<EvolutionRow> {
+        let mut evo_data = vec![];
+        for evolution in entries {
+            let evolution_step = EvolutionStep::from(evolution.chain);
+            let serialized_step = serde_json::to_string(&evolution_step).unwrap();
+            let evolution_row = EvolutionRow {
+                id: evolution.id,
+                evolution: serialized_step,
+            };
+            evo_data.push(evolution_row);
+        }
+        evo_data
+    }
+}
+impl EvolutionFetcher {
+    pub async fn fetch_resource(
+        species: &[SpeciesRow],
+        client: &RustemonClient,
+        db: &Connection,
+    ) -> Result<Vec<EvolutionRow>> {
+        // rustemon::evolution::evolution_chain::get_all_entries() is broken.
+        // Retrieve them instead via species table foreign keys.
+        let mut evolution_ids = HashSet::new();
+        species.iter().for_each(|s| {
+            if let Some(evolution_id) = s.evolution_id {
+                evolution_ids.insert(evolution_id);
+            }
         });
 
-        if let Some(learn_move) = learnable_move {
-            learn_moves.insert(
-                move_.move_.name.clone(),
-                (
-                    learn_move.move_learn_method.name.clone(),
-                    learn_move.level_learned_at,
-                ),
-            );
+        let entries =
+            EvolutionFetcher::fetch_all_entries(evolution_ids.into_iter().collect(), client)
+                .await?;
+
+        Ok(Self::convert_to_rows(entries, db))
+    }
+}
+
+pub struct PokemonFetcher;
+impl FetchIdentifiers<String> for PokemonFetcher {
+    async fn fetch_all_identifiers(client: &RustemonClient) -> Result<Vec<String>> {
+        Ok(rustemon_pokemon::get_all_entries(client)
+            .await?
+            .into_iter()
+            .map(|g| g.name)
+            .collect::<Vec<String>>())
+    }
+}
+impl FetchEntries<String, Pokemon> for PokemonFetcher {
+    async fn fetch_entry(identifier: &String, client: &RustemonClient) -> Result<Pokemon> {
+        Ok(rustemon_pokemon::get_by_name(identifier, client).await?)
+    }
+}
+impl ConvertEntries<Pokemon, PokemonRowGroup> for PokemonFetcher {
+    fn convert_to_rows(entries: Vec<Pokemon>, db: &Connection) -> Vec<PokemonRowGroup> {
+        let mut pokemon_data = vec![];
+        for pokemon in entries {
+            for ability in pokemon.abilities.iter() {
+                let ability_row = PokemonAbilityRow::from_change(ability, pokemon.id, db);
+                pokemon_data.push(PokemonRowGroup::PokemonAbilityRow(ability_row));
+            }
+
+            for move_ in pokemon.moves.iter() {
+                let move_rows = Vec::<PokemonMoveRow>::from_change(move_, pokemon.id, db);
+                pokemon_data.append(
+                    &mut move_rows
+                        .into_iter()
+                        .map(PokemonRowGroup::PokemonMoveRow)
+                        .collect(),
+                );
+            }
+
+            for past_type in pokemon.past_types.iter() {
+                let change_row = PokemonTypeChangeRow::from_change(past_type, pokemon.id, db);
+                pokemon_data.push(PokemonRowGroup::PokemonTypeChangeRow(change_row));
+            }
+
+            let pokemon_row = PokemonRow::from(pokemon);
+            pokemon_data.push(PokemonRowGroup::PokemonRow(pokemon_row));
         }
-    }
-    learn_moves
-}
-
-fn get_pokemon_abilities(abilities: Vec<RustemonPokemonAbility>) -> Vec<(String, bool)> {
-    abilities
-        .iter()
-        .map(|a| (a.ability.name.clone(), a.is_hidden))
-        .collect::<Vec<_>>()
-}
-
-async fn get_pokemon_group(species: &str, client: &RustemonClient) -> Result<PokemonGroup> {
-    let RustemonSpecies {
-        is_legendary,
-        is_mythical,
-        ..
-    } = rustemon_species::get_by_name(species, client).await?;
-
-    if is_mythical {
-        return Ok(PokemonGroup::Mythical);
-    }
-
-    if is_legendary {
-        return Ok(PokemonGroup::Legendary);
-    }
-
-    Ok(PokemonGroup::Regular)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::models::TypeChart;
-    use crate::resource::DatabaseFile;
-
-    #[tokio::test]
-    async fn get_pokemon_test() {
-        let DatabaseFile { ref db, .. } = DatabaseFile::try_new(false).unwrap();
-
-        // Ogerpon was not inroduced until gen 9
-        get_pokemon("ogerpon", "sword-shield").await.unwrap_err();
-        get_pokemon("ogerpon", "the-teal-mask").await.unwrap();
-
-        // Wailord is not present in gen 9, but is present in gen 8
-        get_pokemon("wailord", "scarlet-violet").await.unwrap_err();
-        get_pokemon("wailord", "sword-shield").await.unwrap();
-
-        // Test dual type defense chart
-        let golem = get_pokemon("golem", "scarlet-violet").await.unwrap();
-        let golem_defense = golem.get_defense_chart(db).unwrap();
-        assert_eq!(4.0, golem_defense.get_multiplier("water"));
-        assert_eq!(2.0, golem_defense.get_multiplier("fighting"));
-        assert_eq!(1.0, golem_defense.get_multiplier("psychic"));
-        assert_eq!(0.5, golem_defense.get_multiplier("flying"));
-        assert_eq!(0.25, golem_defense.get_multiplier("poison"));
-        assert_eq!(0.0, golem_defense.get_multiplier("electric"));
-
-        // Clefairy was Normal type until gen 6
-        let clefairy_gen_5 = get_pokemon("clefairy", "black-white").await.unwrap();
-        assert_eq!("normal", clefairy_gen_5.primary_type);
-        let clefairy_gen_6 = get_pokemon("clefairy", "x-y").await.unwrap();
-        assert_eq!("fairy", clefairy_gen_6.primary_type);
-    }
-
-    #[tokio::test]
-    async fn get_evolution_test() {
-        let cascoon = get_evolution("cascoon").await.unwrap();
-        insta::assert_yaml_snapshot!(cascoon);
-
-        let applin = get_evolution("applin").await.unwrap();
-        insta::assert_yaml_snapshot!(applin);
-
-        let politoed = get_evolution("politoed").await.unwrap();
-        insta::assert_yaml_snapshot!(politoed);
+        pokemon_data
     }
 }
+impl FetchResource<String, Pokemon, PokemonRowGroup> for PokemonFetcher {}

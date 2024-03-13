@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{bail, Result};
 use rusqlite::{params, Connection, OptionalExtension, Result as SqlResult, Row};
 
 pub trait FromRow<T>: Sized {
@@ -21,6 +21,10 @@ pub trait SelectRow: TableRow + Sized {
         );
         db.query_row(&query, [name], Self::on_hit)
     }
+    fn select_by_id(id: i64, db: &Connection) -> SqlResult<Self> {
+        let query = format!("SELECT * FROM {table} WHERE id = ?1", table = Self::table());
+        db.query_row(&query, [id], Self::on_hit)
+    }
     fn on_hit(row: &Row<'_>) -> SqlResult<Self>;
 }
 
@@ -34,8 +38,91 @@ pub trait SelectChangeRow: TableRow + Sized {
         db.query_row(&query, [fk_id, generation as i64], Self::on_hit)
             .optional()
     }
+
     fn fk() -> &'static str;
     fn on_hit(row: &Row<'_>) -> SqlResult<Self>;
+}
+
+pub trait SelectAllNames: TableRow {
+    fn select_all_names(db: &Connection) -> SqlResult<Vec<String>> {
+        let mut statement = db.prepare_cached(&format!(
+            "SELECT name FROM {table} ORDER BY id",
+            table = Self::table()
+        ))?;
+        let rows = statement.query_map([], |row| row.get(0))?;
+
+        let mut names = vec![];
+        for row in rows {
+            names.push(row?);
+        }
+
+        Ok(names)
+    }
+}
+
+pub enum ResourceResult {
+    Valid,
+    Invalid(Vec<String>),
+}
+
+pub trait Resource: SelectAllNames {
+    fn get_matches(value: &str, db: &Connection) -> Vec<String> {
+        Self::resource(db)
+            .iter()
+            .filter_map(|r| {
+                let close_enough = if !r.is_empty() && !value.is_empty() {
+                    let first_r = r.chars().next().unwrap();
+                    let first_value = value.chars().next().unwrap();
+
+                    // Only perform spellcheck on first character match; potentially expensive
+                    first_r == first_value && strsim::levenshtein(r, value) < 4
+                } else {
+                    false
+                };
+
+                if r.contains(value) || close_enough {
+                    Some(r.clone())
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<String>>()
+    }
+
+    fn check(value: &str, db: &Connection) -> ResourceResult {
+        let matches = Self::get_matches(value, db);
+        if matches.iter().any(|m| *m == value) {
+            ResourceResult::Valid
+        } else {
+            ResourceResult::Invalid(matches)
+        }
+    }
+
+    fn validate(value: &str, db: &Connection) -> Result<String> {
+        let value = value.to_lowercase();
+        match Self::check(&value, db) {
+            ResourceResult::Valid => Ok(value),
+            ResourceResult::Invalid(matches) => bail!(Self::invalid_message(&value, &matches)),
+        }
+    }
+
+    fn invalid_message(value: &str, matches: &[String]) -> String {
+        let resource_name = Self::label();
+        let mut message = format!("{resource_name} '{value}' not found.");
+
+        if matches.len() > 20 {
+            message += " Potential matches found; too many to display.";
+        } else if !matches.is_empty() {
+            message += &format!(" Potential matches: {}.", matches.join(" "));
+        }
+
+        message
+    }
+
+    fn resource(db: &Connection) -> Vec<String> {
+        Self::select_all_names(db).unwrap()
+    }
+    fn label() -> &'static str;
 }
 
 pub struct GameRow {
@@ -63,6 +150,12 @@ impl InsertRow for GameRow {
     fn insert(&self, db: &Connection) -> SqlResult<usize> {
         let mut statement = db.prepare_cached(include_str!("../sql/insert_game.sql"))?;
         statement.execute(params![self.id, self.name, self.order, self.generation])
+    }
+}
+impl SelectAllNames for GameRow {}
+impl Resource for GameRow {
+    fn label() -> &'static str {
+        "Game"
     }
 }
 
@@ -114,6 +207,12 @@ impl InsertRow for MoveRow {
             self.effect_chance,
             self.generation
         ])
+    }
+}
+impl SelectAllNames for MoveRow {}
+impl Resource for MoveRow {
+    fn label() -> &'static str {
+        "Move"
     }
 }
 
@@ -229,6 +328,12 @@ impl InsertRow for TypeRow {
         ])
     }
 }
+impl SelectAllNames for TypeRow {}
+impl Resource for TypeRow {
+    fn label() -> &'static str {
+        "Type"
+    }
+}
 
 pub struct TypeChangeRow {
     pub id: Option<i64>,
@@ -322,6 +427,12 @@ impl InsertRow for AbilityRow {
         statement.execute(params![self.id, self.name, self.effect, self.generation])
     }
 }
+impl SelectAllNames for AbilityRow {}
+impl Resource for AbilityRow {
+    fn label() -> &'static str {
+        "Ability"
+    }
+}
 
 pub struct EvolutionRow {
     pub id: i64,
@@ -336,6 +447,14 @@ impl InsertRow for EvolutionRow {
     fn insert(&self, db: &Connection) -> SqlResult<usize> {
         let mut statement = db.prepare_cached(include_str!("../sql/insert_evolution.sql"))?;
         statement.execute(params![self.id, self.evolution,])
+    }
+}
+impl SelectRow for EvolutionRow {
+    fn on_hit(row: &Row<'_>) -> SqlResult<Self> {
+        Ok(Self {
+            id: row.get(0)?,
+            evolution: row.get(1)?,
+        })
     }
 }
 
@@ -365,12 +484,25 @@ impl InsertRow for SpeciesRow {
         ])
     }
 }
+impl SelectRow for SpeciesRow {
+    fn on_hit(row: &Row<'_>) -> SqlResult<Self> {
+        Ok(Self {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            is_baby: row.get(2)?,
+            is_legendary: row.get(3)?,
+            is_mythical: row.get(4)?,
+            evolution_id: row.get(5)?,
+        })
+    }
+}
 
 pub struct PokemonRow {
     pub id: i64,
     pub name: String,
     pub primary_type: String,
     pub secondary_type: Option<String>,
+    pub hp: i64,
     pub attack: i64,
     pub defense: i64,
     pub special_attack: i64,
@@ -391,6 +523,7 @@ impl InsertRow for PokemonRow {
             self.name,
             self.primary_type,
             self.secondary_type,
+            self.hp,
             self.attack,
             self.defense,
             self.special_attack,
@@ -400,10 +533,33 @@ impl InsertRow for PokemonRow {
         ])
     }
 }
+impl SelectRow for PokemonRow {
+    fn on_hit(row: &Row<'_>) -> SqlResult<Self> {
+        Ok(Self {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            primary_type: row.get(2)?,
+            secondary_type: row.get(3)?,
+            hp: row.get(4)?,
+            attack: row.get(5)?,
+            defense: row.get(6)?,
+            special_attack: row.get(7)?,
+            special_defense: row.get(8)?,
+            speed: row.get(9)?,
+            species_id: row.get(10)?,
+        })
+    }
+}
+impl SelectAllNames for PokemonRow {}
+impl Resource for PokemonRow {
+    fn label() -> &'static str {
+        "Pokémon"
+    }
+}
 
 pub struct PokemonMoveRow {
     pub id: Option<i64>,
-    pub name: String,
+    pub move_id: i64,
     pub learn_method: String,
     pub learn_level: i64,
     pub generation: u8,
@@ -419,7 +575,7 @@ impl InsertRow for PokemonMoveRow {
         let mut statement = db.prepare_cached(include_str!("../sql/insert_pokemon_move.sql"))?;
         statement.execute(params![
             self.id,
-            self.name,
+            self.move_id,
             self.learn_method,
             self.learn_level,
             self.generation,
@@ -427,10 +583,30 @@ impl InsertRow for PokemonMoveRow {
         ])
     }
 }
+impl PokemonMoveRow {
+    pub fn select_by_pokemon(
+        pokemon_id: i64,
+        generation: u8,
+        db: &Connection,
+    ) -> SqlResult<Vec<(String, String, i64)>> {
+        let mut statement = db.prepare_cached(include_str!("../sql/select_pokemon_moves.sql"))?;
+        let rows = statement.query_map([pokemon_id, generation as i64], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+        })?;
+
+        let mut moves = vec![];
+        for row in rows {
+            let row = row?;
+            moves.push((row.0, row.1, row.2));
+        }
+
+        Ok(moves)
+    }
+}
 
 pub struct PokemonAbilityRow {
     pub id: Option<i64>,
-    pub name: String,
+    pub ability_id: i64,
     pub is_hidden: bool,
     pub slot: i64,
     pub pokemon_id: i64,
@@ -445,11 +621,25 @@ impl InsertRow for PokemonAbilityRow {
         let mut statement = db.prepare_cached(include_str!("../sql/insert_pokemon_ability.sql"))?;
         statement.execute(params![
             self.id,
-            self.name,
+            self.ability_id,
             self.is_hidden,
             self.slot,
             self.pokemon_id,
         ])
+    }
+}
+impl PokemonAbilityRow {
+    pub fn select_by_pokemon(pokemon_id: i64, db: &Connection) -> SqlResult<Vec<(String, bool)>> {
+        let mut statement =
+            db.prepare_cached(include_str!("../sql/select_pokemon_abilities.sql"))?;
+        let rows = statement.query_map([pokemon_id], |row| Ok((row.get(0)?, row.get(1)?)))?;
+
+        let mut abilities = vec![];
+        for row in rows {
+            abilities.push(row?);
+        }
+
+        Ok(abilities)
     }
 }
 
@@ -476,6 +666,21 @@ impl InsertRow for PokemonTypeChangeRow {
             self.generation,
             self.pokemon_id,
         ])
+    }
+}
+impl SelectChangeRow for PokemonTypeChangeRow {
+    fn fk() -> &'static str {
+        "pokemon_id"
+    }
+
+    fn on_hit(row: &Row<'_>) -> SqlResult<Self> {
+        Ok(Self {
+            id: row.get(0)?,
+            primary_type: row.get(1)?,
+            secondary_type: row.get(2)?,
+            generation: row.get(3)?,
+            pokemon_id: row.get(4)?,
+        })
     }
 }
 

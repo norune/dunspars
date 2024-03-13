@@ -1,1 +1,1 @@
-INSERT INTO pokemon_abilities ([id], [name], [is_hidden], [slot], [pokemon_id]) VALUES (?1, ?2, ?3, ?4, ?5);
+INSERT INTO pokemon_abilities ([id], [ability_id], [is_hidden], [slot], [pokemon_id]) VALUES (?1, ?2, ?3, ?4, ?5);

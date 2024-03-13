@@ -1,5 +1,5 @@
 ---
-source: src/api.rs
+source: src/models.rs
 expression: cascoon
 ---
 name: wurmple

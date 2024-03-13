@@ -1,18 +1,16 @@
 mod display;
 mod utils;
 
-use crate::api::api_client;
-use crate::api::once::game_resource;
+use crate::api::game_to_gen;
+use crate::models::resource::{AbilityRow, GameRow, MoveRow, PokemonRow, Resource, TypeRow};
 use crate::models::{Ability, Move, Pokemon, PokemonData, Type};
-use crate::resource::{
-    AbilityResource, DatabaseFile, GameResourceFile, GetGeneration, MoveResource, PokemonResource,
-    Resource, ResourceFile, TypeResource,
-};
+use crate::resource::DatabaseFile;
 use display::*;
 
 use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
 use indoc::{formatdoc, printdoc};
+use rusqlite::Connection;
 
 const VERSION: &str = env!("DUNSPARS_VERSION");
 
@@ -111,10 +109,6 @@ enum ResetType {
 pub async fn run() -> Result<()> {
     let cli = Cli::parse();
 
-    let game_resource_file = GameResourceFile::try_new()?;
-    game_resource_file.build_if_missing(false).await?;
-    let db_file = DatabaseFile::try_new(false)?;
-
     let mut config_builder = ConfigBuilder::new();
     if let Some(game) = cli.game {
         config_builder = config_builder.game(game);
@@ -125,8 +119,9 @@ pub async fn run() -> Result<()> {
     if cli.no_color {
         config_builder = config_builder.color_enabled(false);
     }
-    let config = config_builder.build()?;
 
+    let db_file = DatabaseFile::try_new(false)?;
+    let config = config_builder.build(&db_file.db)?;
     let program = Program::new(config, db_file);
 
     match cli.command {
@@ -183,15 +178,15 @@ impl ConfigBuilder {
         self
     }
 
-    pub fn build(self) -> Result<Config> {
+    pub fn build(self, db: &Connection) -> Result<Config> {
         let game = match self.game {
-            Some(game) => game_resource().validate(&game)?,
+            Some(game) => GameRow::validate(&game, db)?,
             None => self
-                .get_latest_game()
+                .get_latest_game(db)
                 .ok_or(anyhow!("Cannot find the latest game"))?,
         };
 
-        let generation = game_resource().get_gen(&game);
+        let generation = game_to_gen(&game, db);
         let color_enabled = self.color_enabled.unwrap_or(utils::is_color_enabled());
 
         Ok(Config {
@@ -201,12 +196,13 @@ impl ConfigBuilder {
         })
     }
 
-    fn get_latest_game(&self) -> Option<String> {
-        game_resource().resource().last().map(|g| g.to_string())
+    fn get_latest_game(&self, db: &Connection) -> Option<String> {
+        GameRow::resource(db).last().map(|g| g.to_string())
     }
 }
 
 struct Config {
+    #[allow(dead_code)]
     game: String,
     generation: u8,
     color_enabled: bool,
@@ -223,10 +219,10 @@ impl Program {
     }
 
     async fn run_pokemon(&self, name: String, moves: bool, evolution: bool) -> Result<String> {
-        let resource = PokemonResource::try_new(&api_client()).await?;
-        let pokemon_name = resource.validate(&name)?;
+        let pokemon_name = PokemonRow::validate(&name, &self.db_file.db)?;
 
-        let pokemon = PokemonData::from_name(&pokemon_name, &self.config.game).await?;
+        let pokemon =
+            PokemonData::from_name(&pokemon_name, self.config.generation, &self.db_file.db)?;
         let pokemon_display = DisplayComponent::new(&pokemon, self.config.color_enabled);
 
         let defense_chart = pokemon.get_defense_chart(&self.db_file.db)?;
@@ -245,7 +241,7 @@ impl Program {
         };
 
         if evolution {
-            let evolution_step = pokemon.get_evolution_steps().await?;
+            let evolution_step = pokemon.get_evolution_steps(&self.db_file.db)?;
             let evolution_step_display =
                 DisplayComponent::new(&evolution_step, self.config.color_enabled);
             output += formatdoc! {
@@ -279,8 +275,7 @@ impl Program {
     }
 
     async fn run_type(&self, name: String) -> Result<String> {
-        let resource = TypeResource::try_new(&api_client()).await?;
-        let type_name = resource.validate(&name)?;
+        let type_name = TypeRow::validate(&name, &self.db_file.db)?;
 
         let Type {
             offense_chart,
@@ -318,10 +313,9 @@ impl Program {
         verbose: bool,
         stab_only: bool,
     ) -> Result<String> {
-        let resource = PokemonResource::try_new(&api_client()).await?;
-
-        let attacker_name = resource.validate(&attacker_name)?;
-        let attacker_data = PokemonData::from_name(&attacker_name, &self.config.game).await?;
+        let attacker_name = PokemonRow::validate(&attacker_name, &self.db_file.db)?;
+        let attacker_data =
+            PokemonData::from_name(&attacker_name, self.config.generation, &self.db_file.db)?;
         let attacker_moves = attacker_data.get_moves(&self.db_file.db)?;
         let attacker_chart = attacker_data.get_defense_chart(&self.db_file.db)?;
         let attacker = Pokemon::new(attacker_data, attacker_chart, attacker_moves);
@@ -329,8 +323,9 @@ impl Program {
         let mut defenders = vec![];
 
         for defender_name in defender_names {
-            let defender_name = resource.validate(&defender_name)?;
-            let defender_data = PokemonData::from_name(&defender_name, &self.config.game).await?;
+            let defender_name = PokemonRow::validate(&defender_name, &self.db_file.db)?;
+            let defender_data =
+                PokemonData::from_name(&defender_name, self.config.generation, &self.db_file.db)?;
             let defender_moves = defender_data.get_moves(&self.db_file.db)?;
             let defender_chart = defender_data.get_defense_chart(&self.db_file.db)?;
             let defender = Pokemon::new(defender_data, defender_chart, defender_moves);
@@ -362,12 +357,11 @@ impl Program {
     }
 
     async fn run_coverage(&self, names: Vec<String>) -> Result<String> {
-        let resource = PokemonResource::try_new(&api_client()).await?;
         let mut pokemon = vec![];
 
         for name in names {
-            let name = resource.validate(&name)?;
-            let data = PokemonData::from_name(&name, &self.config.game).await?;
+            let name = PokemonRow::validate(&name, &self.db_file.db)?;
+            let data = PokemonData::from_name(&name, self.config.generation, &self.db_file.db)?;
             let moves = data.get_moves(&self.db_file.db)?;
             let chart = data.get_defense_chart(&self.db_file.db)?;
 
@@ -389,8 +383,7 @@ impl Program {
     }
 
     async fn run_move(&self, name: String) -> Result<String> {
-        let resource = MoveResource::try_new(&api_client()).await?;
-        let move_name = resource.validate(&name)?;
+        let move_name = MoveRow::validate(&name, &self.db_file.db)?;
 
         let move_ = Move::from_name(&move_name, self.config.generation, &self.db_file.db)?;
         let move_display = DisplayComponent::new(&move_, self.config.color_enabled);
@@ -405,8 +398,7 @@ impl Program {
     }
 
     async fn run_ability(&self, name: String) -> Result<String> {
-        let resource = AbilityResource::try_new(&api_client()).await?;
-        let ability_name = resource.validate(&name)?;
+        let ability_name = AbilityRow::validate(&name, &self.db_file.db)?;
 
         let ability = Ability::from_name(&ability_name, self.config.generation, &self.db_file.db)?;
         let ability_display = DisplayComponent::new(&ability, self.config.color_enabled);
@@ -422,25 +414,12 @@ impl Program {
 
     async fn run_resource(&self, resource: ResourceArgs, delimiter: Option<String>) -> Result<()> {
         let delimiter = delimiter.unwrap_or("\n".to_string());
-        let client = api_client();
         let resource = match resource {
-            ResourceArgs::Pokemon => PokemonResource::try_new(&client)
-                .await?
-                .resource()
-                .join(&delimiter),
-            ResourceArgs::Moves => MoveResource::try_new(&client)
-                .await?
-                .resource()
-                .join(&delimiter),
-            ResourceArgs::Abilities => AbilityResource::try_new(&client)
-                .await?
-                .resource()
-                .join(&delimiter),
-            ResourceArgs::Types => TypeResource::try_new(&client)
-                .await?
-                .resource()
-                .join(&delimiter),
-            ResourceArgs::Games => game_resource().resource().join(&delimiter),
+            ResourceArgs::Pokemon => PokemonRow::resource(&self.db_file.db).join(&delimiter),
+            ResourceArgs::Moves => MoveRow::resource(&self.db_file.db).join(&delimiter),
+            ResourceArgs::Abilities => AbilityRow::resource(&self.db_file.db).join(&delimiter),
+            ResourceArgs::Types => TypeRow::resource(&self.db_file.db).join(&delimiter),
+            ResourceArgs::Games => GameRow::resource(&self.db_file.db).join(&delimiter),
         };
 
         printdoc! {
@@ -453,7 +432,7 @@ impl Program {
     }
 
     async fn run_setup(&self) -> Result<()> {
-        let db = DatabaseFile::try_new(true)?;
+        let mut db = DatabaseFile::try_new(true)?;
         db.build_db().await
     }
 }
@@ -463,12 +442,12 @@ mod tests {
     use super::*;
 
     async fn setup_program(game: &str) -> Program {
+        let db_file = DatabaseFile::try_new(false).unwrap();
         let config = ConfigBuilder::new()
             .game(String::from(game))
             .color_enabled(false)
-            .build()
+            .build(&db_file.db)
             .unwrap();
-        let db_file = DatabaseFile::try_new(false).unwrap();
         Program::new(config, db_file)
     }
 

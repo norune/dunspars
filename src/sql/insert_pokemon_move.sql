@@ -1,1 +1,1 @@
-INSERT INTO pokemon_moves ([id], [name], [learn_method], [learn_level], [generation], [pokemon_id]) VALUES (?1, ?2, ?3, ?4, ?5, ?6);
+INSERT INTO pokemon_moves ([id], [move_id], [learn_method], [learn_level], [generation], [pokemon_id]) VALUES (?1, ?2, ?3, ?4, ?5, ?6);

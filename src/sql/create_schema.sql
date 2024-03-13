@@ -25,6 +25,7 @@ CREATE TABLE pokemon (
     [name] TEXT NOT NULL,
     [primary_type] TEXT NOT NULL,
     [secondary_type] TEXT,
+    [hp] INTEGER NOT NULL,
     [attack] INTEGER NOT NULL,
     [defense] INTEGER NOT NULL,
     [special_attack] INTEGER NOT NULL,
@@ -36,20 +37,22 @@ CREATE TABLE pokemon (
 
 CREATE TABLE pokemon_moves (
     [id] INTEGER PRIMARY KEY,
-    [name] TEXT NOT NULL,
+    [move_id] INTEGER NOT NULL,
     [learn_method] TEXT NOT NULL,
     [learn_level] INTEGER NOT NULL,
     [generation] INTEGER NOT NULL,
     [pokemon_id] INTEGER NOT NULL,
+    FOREIGN KEY([move_id]) REFERENCES moves([id]),
     FOREIGN KEY([pokemon_id]) REFERENCES pokemon([id])
 );
 
 CREATE TABLE pokemon_abilities (
     [id] INTEGER PRIMARY KEY,
-    [name] TEXT NOT NULL,
+    [ability_id] INTEGER NOT NULL,
     [is_hidden] BOOLEAN NOT NULL,
     [slot] INTEGER NOT NULL,
     [pokemon_id] INTEGER NOT NULL,
+    FOREIGN KEY([ability_id]) REFERENCES abilities([id]),
     FOREIGN KEY([pokemon_id]) REFERENCES pokemon([id])
 );
 

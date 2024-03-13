@@ -20,12 +20,7 @@ impl fmt::Display for DisplayComponent<MoveListComponent<'_>> {
         )?;
 
         let MoveListComponent { pokemon, move_list } = self.context;
-
-        let mut learn_moves = pokemon
-            .learn_moves
-            .iter()
-            .map(|m| (m.0, &m.1 .0, m.1 .1))
-            .collect::<Vec<(&String, &String, i64)>>();
+        let mut learn_moves = pokemon.learn_moves.clone();
 
         if learn_moves.is_empty() {
             write!(f, "\nThere are no moves to display.\n")?;
@@ -48,7 +43,7 @@ impl fmt::Display for DisplayComponent<MoveListComponent<'_>> {
                 damage_class,
                 type_,
                 ..
-            } = move_list.get_map().get(name).unwrap();
+            } = move_list.get_map().get(&name).unwrap();
 
             let stab = if is_stab(type_, pokemon) { "(s)" } else { "" };
 

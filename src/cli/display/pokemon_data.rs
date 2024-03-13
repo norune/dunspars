@@ -1,5 +1,5 @@
 use super::{Colors, DisplayComponent};
-use crate::models::{PokemonData, PokemonGroup};
+use crate::models::PokemonData;
 
 use std::fmt;
 
@@ -9,7 +9,6 @@ impl fmt::Display for DisplayComponent<&PokemonData> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let PokemonData {
             name,
-            game,
             generation,
             primary_type,
             secondary_type,
@@ -22,12 +21,6 @@ impl fmt::Display for DisplayComponent<&PokemonData> {
         let secondary_type = match secondary_type {
             Some(type_) => format!(" {type_} "),
             None => " ".to_string(),
-        };
-
-        let group = match group {
-            PokemonGroup::Mythical => "mythical",
-            PokemonGroup::Legendary => "legendary",
-            PokemonGroup::Regular => "",
         };
 
         let stats_display = DisplayComponent::new(stats, self.color_enabled);
@@ -48,7 +41,7 @@ impl fmt::Display for DisplayComponent<&PokemonData> {
             "{header}{name}{header:#} {primary_type}{secondary_type}{yellow}{group}{yellow:#}
             {abilities}
             {stats_display}
-            {game} gen-{generation}",
+            gen-{generation}",
             header = self.ansi_bold(Colors::Header),
             yellow = self.ansi(Colors::Yellow),
         }
