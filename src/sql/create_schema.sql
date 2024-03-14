@@ -1,3 +1,8 @@
+CREATE TABLE meta (
+    [name] TEXT PRIMARY KEY,
+    [value] TEXT NOT NULL
+);
+
 CREATE TABLE games (
     [id] INTEGER PRIMARY KEY,
     [name] TEXT NOT NULL,

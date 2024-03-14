@@ -709,21 +709,26 @@ mod tests {
     use super::*;
     use crate::resource::DatabaseFile;
 
+    fn db() -> Connection {
+        let db_file = DatabaseFile::default();
+        db_file.connect().unwrap()
+    }
+
     #[test]
     fn get_pokemon_by_name() {
-        let DatabaseFile { ref db, .. } = DatabaseFile::try_new(false).unwrap();
+        let db = db();
 
         // Ogerpon was not inroduced until gen 9
-        PokemonData::from_name("ogerpon", 8, db).unwrap_err();
-        PokemonData::from_name("ogerpon", 9, db).unwrap();
+        PokemonData::from_name("ogerpon", 8, &db).unwrap_err();
+        PokemonData::from_name("ogerpon", 9, &db).unwrap();
 
         // Wailord is not present in gen 9, but is present in gen 8
-        PokemonData::from_name("wailord", 9, db).unwrap_err();
-        PokemonData::from_name("wailord", 8, db).unwrap();
+        PokemonData::from_name("wailord", 9, &db).unwrap_err();
+        PokemonData::from_name("wailord", 8, &db).unwrap();
 
         // Test dual type defense chart
-        let golem = PokemonData::from_name("golem", 9, db).unwrap();
-        let golem_defense = golem.get_defense_chart(db).unwrap();
+        let golem = PokemonData::from_name("golem", 9, &db).unwrap();
+        let golem_defense = golem.get_defense_chart(&db).unwrap();
         assert_eq!(4.0, golem_defense.get_multiplier("water"));
         assert_eq!(2.0, golem_defense.get_multiplier("fighting"));
         assert_eq!(1.0, golem_defense.get_multiplier("psychic"));
@@ -732,85 +737,85 @@ mod tests {
         assert_eq!(0.0, golem_defense.get_multiplier("electric"));
 
         // Clefairy was Normal type until gen 6
-        let clefairy_gen_5 = PokemonData::from_name("clefairy", 5, db).unwrap();
+        let clefairy_gen_5 = PokemonData::from_name("clefairy", 5, &db).unwrap();
         assert_eq!("normal", clefairy_gen_5.primary_type);
-        let clefairy_gen_6 = PokemonData::from_name("clefairy", 6, db).unwrap();
+        let clefairy_gen_6 = PokemonData::from_name("clefairy", 6, &db).unwrap();
         assert_eq!("fairy", clefairy_gen_6.primary_type);
     }
 
     #[test]
     fn get_pokemon_evolution() {
-        let DatabaseFile { ref db, .. } = DatabaseFile::try_new(false).unwrap();
+        let db = db();
 
-        let cascoon = PokemonData::from_name("cascoon", 3, db)
+        let cascoon = PokemonData::from_name("cascoon", 3, &db)
             .unwrap()
-            .get_evolution_steps(db)
+            .get_evolution_steps(&db)
             .unwrap();
         insta::assert_yaml_snapshot!(cascoon);
 
-        let applin = PokemonData::from_name("applin", 9, db)
+        let applin = PokemonData::from_name("applin", 9, &db)
             .unwrap()
-            .get_evolution_steps(db)
+            .get_evolution_steps(&db)
             .unwrap();
         insta::assert_yaml_snapshot!(applin);
 
-        let politoed = PokemonData::from_name("politoed", 9, db)
+        let politoed = PokemonData::from_name("politoed", 9, &db)
             .unwrap()
-            .get_evolution_steps(db)
+            .get_evolution_steps(&db)
             .unwrap();
         insta::assert_yaml_snapshot!(politoed);
     }
 
     #[test]
     fn get_type_by_name() {
-        let DatabaseFile { ref db, .. } = DatabaseFile::try_new(false).unwrap();
+        let db = db();
 
         // Fairy was not introduced until gen 6
-        Type::from_name("fairy", 5, db).unwrap_err();
-        Type::from_name("fairy", 6, db).unwrap();
+        Type::from_name("fairy", 5, &db).unwrap_err();
+        Type::from_name("fairy", 6, &db).unwrap();
 
         // Bug gen 1 2x against poison
-        let bug_gen_1 = Type::from_name("bug", 1, db).unwrap();
+        let bug_gen_1 = Type::from_name("bug", 1, &db).unwrap();
         assert_eq!(2.0, bug_gen_1.offense_chart.get_multiplier("poison"));
         assert_eq!(1.0, bug_gen_1.offense_chart.get_multiplier("dark"));
 
         // Bug gen >=2 2x against dark
-        let bug_gen_2 = Type::from_name("bug", 2, db).unwrap();
+        let bug_gen_2 = Type::from_name("bug", 2, &db).unwrap();
         assert_eq!(0.5, bug_gen_2.offense_chart.get_multiplier("poison"));
         assert_eq!(2.0, bug_gen_2.offense_chart.get_multiplier("dark"));
     }
 
     #[test]
     fn get_move_by_name() {
-        let DatabaseFile { ref db, .. } = DatabaseFile::try_new(false).unwrap();
+        let db = db();
 
         // Earth Power was not introduced until gen 4
-        Move::from_name("earth-power", 3, db).unwrap_err();
-        Move::from_name("earth-power", 4, db).unwrap();
+        Move::from_name("earth-power", 3, &db).unwrap_err();
+        Move::from_name("earth-power", 4, &db).unwrap();
 
         // Tackle gen 1-4 power: 35 accuracy: 95
-        let tackle_gen_4 = Move::from_name("tackle", 4, db).unwrap();
+        let tackle_gen_4 = Move::from_name("tackle", 4, &db).unwrap();
         assert_eq!(35, tackle_gen_4.power.unwrap());
         assert_eq!(95, tackle_gen_4.accuracy.unwrap());
 
         // Tackle gen 5-6 power: 50 accuracy: 100
-        let tackle_gen_5 = Move::from_name("tackle", 5, db).unwrap();
+        let tackle_gen_5 = Move::from_name("tackle", 5, &db).unwrap();
         assert_eq!(50, tackle_gen_5.power.unwrap());
         assert_eq!(100, tackle_gen_5.accuracy.unwrap());
 
         // Tackle gen >=7 power: 40 accuracy: 100
-        let tackle_gen_7 = Move::from_name("tackle", 7, db).unwrap();
+        let tackle_gen_7 = Move::from_name("tackle", 7, &db).unwrap();
         assert_eq!(40, tackle_gen_7.power.unwrap());
         assert_eq!(100, tackle_gen_7.accuracy.unwrap());
     }
 
     #[test]
     fn get_ability_by_name() {
-        let DatabaseFile { ref db, .. } = DatabaseFile::try_new(false).unwrap();
+        let db = db();
 
         // Beads of Ruin was not introduced until gen 9
-        Ability::from_name("beads-of-ruin", 8, db).unwrap_err();
-        Ability::from_name("beads-of-ruin", 9, db).unwrap();
+        Ability::from_name("beads-of-ruin", 8, &db).unwrap_err();
+        Ability::from_name("beads-of-ruin", 9, &db).unwrap();
     }
 
     #[test]

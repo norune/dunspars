@@ -30,11 +30,8 @@ use rustemon::model::moves::Move;
 use rustemon::model::pokemon::{Ability, Pokemon, PokemonSpecies, Type};
 
 pub fn api_client() -> RustemonClient {
-    // This disregards cache staleness. Pokémon data is not likely to change
-    // Cache should be cleared by user via program command
-    let cache_mode = CacheMode::ForceCache;
     RustemonClientBuilder::default()
-        .with_mode(cache_mode)
+        .with_mode(CacheMode::ForceCache)
         .try_build()
         .unwrap()
 }

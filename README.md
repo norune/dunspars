@@ -2,6 +2,13 @@
 A command-line interface for Pokémon information pulled from the [PokéAPI](https://pokeapi.co/) via [Rustemon](https://github.com/mlemesle/rustemon).
 
 ## Usage
+### Setup
+Before using the program, run the one-time setup. 
+```
+dunspars setup
+```
+This action requires an internet connection. Once it is finished, the program should be available for use offline.
+
 ### Pokemon
 View a Pokémon's basic information. 
 ```

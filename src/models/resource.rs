@@ -700,3 +700,27 @@ impl InsertRow for PokemonRowGroup {
         }
     }
 }
+
+pub struct MetaRow {
+    pub name: String,
+    pub value: String,
+}
+impl TableRow for MetaRow {
+    fn table() -> &'static str {
+        "meta"
+    }
+}
+impl InsertRow for MetaRow {
+    fn insert(&self, db: &Connection) -> SqlResult<usize> {
+        let mut statement = db.prepare_cached(include_str!("../sql/insert_meta.sql"))?;
+        statement.execute(params![self.name, self.value])
+    }
+}
+impl SelectRow for MetaRow {
+    fn on_hit(row: &Row<'_>) -> SqlResult<Self> {
+        Ok(Self {
+            name: row.get(0)?,
+            value: row.get(1)?,
+        })
+    }
+}

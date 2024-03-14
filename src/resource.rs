@@ -3,14 +3,14 @@ use crate::api::{
     AbilityFetcher, EvolutionFetcher, FetchResource, GameFetcher, MoveFetcher, PokemonFetcher,
     SpeciesFetcher, TypeFetcher,
 };
-use crate::models::resource::InsertRow;
+use crate::models::resource::{InsertRow, MetaRow, SelectRow};
+use crate::VERSION;
 
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use rusqlite::{Connection, Result as SqlResult};
-use rustemon::client::RustemonClient;
 
 enum AppDirectories {
     Cache,
@@ -51,16 +51,17 @@ fn app_directory(base_dir: AppDirectories, target_dir: &str) -> PathBuf {
 }
 
 pub trait File {
-    fn build_dir() -> Result<PathBuf> {
-        let dir = Self::dir();
-        if !path_exists(&dir) {
-            fs::create_dir_all(&dir)?;
+    fn build_dir(&self) -> Result<()> {
+        if let Some(dir) = self.get_path().parent() {
+            if !path_exists(dir) {
+                fs::create_dir_all(dir)?;
+            }
         }
-        Ok(dir)
+        Ok(())
     }
 
     fn get_path(&self) -> &PathBuf;
-    fn dir() -> PathBuf;
+    fn path() -> PathBuf;
 }
 
 fn path_exists(path: &Path) -> bool {
@@ -72,69 +73,80 @@ fn path_exists(path: &Path) -> bool {
 }
 
 pub struct DatabaseFile {
-    pub db: Connection,
-    api_client: RustemonClient,
     path: PathBuf,
 }
+impl Default for DatabaseFile {
+    fn default() -> Self {
+        Self { path: Self::path() }
+    }
+}
 impl DatabaseFile {
-    pub fn try_new(overwrite: bool) -> Result<Self> {
-        let mut path = Self::build_dir()?;
-        path.push("resource.db");
+    pub fn connect(&self) -> Result<Connection> {
+        self.build_dir()?;
+        let db = Connection::open(&self.path)?;
 
-        if overwrite && path_exists(&path) {
-            fs::remove_file(&path)?;
+        let meta = MetaRow::select_by_name("version", &db);
+        if let Ok(db_version) = meta {
+            if db_version.value == VERSION {
+                Ok(db)
+            } else {
+                bail!(
+                    "Database version '{}' mismatch. Run `dunspars setup` again.",
+                    db_version.value
+                );
+            }
+        } else {
+            bail!("Database not set up. Run `dunspars setup` first.");
         }
-
-        let db = Connection::open(&path)?;
-        let api_client = api_client();
-
-        Ok(Self {
-            path,
-            db,
-            api_client,
-        })
     }
 
-    pub async fn build_db(&mut self) -> Result<()> {
-        self.create_schema()?;
+    pub async fn build_db(&self, db: &mut Connection) -> Result<()> {
+        let api = api_client();
+        fs::remove_file(&self.path)?;
+        self.create_schema(db)?;
 
         println!("retrieving games");
-        let games = GameFetcher::fetch_resource(&self.api_client, &self.db).await?;
-        self.populate_table(games)?;
+        let games = GameFetcher::fetch_resource(&api, db).await?;
+        self.populate_table(games, db)?;
 
         println!("retrieving moves");
-        let moves = MoveFetcher::fetch_resource(&self.api_client, &self.db).await?;
-        self.populate_table(moves)?;
+        let moves = MoveFetcher::fetch_resource(&api, db).await?;
+        self.populate_table(moves, db)?;
 
         println!("retrieving types");
-        let types = TypeFetcher::fetch_resource(&self.api_client, &self.db).await?;
-        self.populate_table(types)?;
+        let types = TypeFetcher::fetch_resource(&api, db).await?;
+        self.populate_table(types, db)?;
 
         println!("retrieving abilities");
-        let abilities = AbilityFetcher::fetch_resource(&self.api_client, &self.db).await?;
-        self.populate_table(abilities)?;
+        let abilities = AbilityFetcher::fetch_resource(&api, db).await?;
+        self.populate_table(abilities, db)?;
 
         println!("retrieving species");
-        let species = SpeciesFetcher::fetch_resource(&self.api_client, &self.db).await?;
+        let species = SpeciesFetcher::fetch_resource(&api, db).await?;
         println!("retrieving evolution");
-        let evolutions =
-            EvolutionFetcher::fetch_resource(&species, &self.api_client, &self.db).await?;
-        self.populate_table(species)?;
-        self.populate_table(evolutions)?;
+        let evolutions = EvolutionFetcher::fetch_resource(&species, &api, db).await?;
+        self.populate_table(species, db)?;
+        self.populate_table(evolutions, db)?;
 
         println!("retrieving pokemon");
-        let pokemon = PokemonFetcher::fetch_resource(&self.api_client, &self.db).await?;
-        self.populate_table(pokemon)?;
+        let pokemon = PokemonFetcher::fetch_resource(&api, db).await?;
+        self.populate_table(pokemon, db)?;
+
+        let meta = vec![MetaRow {
+            name: String::from("version"),
+            value: String::from(VERSION),
+        }];
+        self.populate_table(meta, db)?;
 
         Ok(())
     }
 
-    fn create_schema(&self) -> SqlResult<()> {
-        self.db.execute_batch(include_str!("sql/create_schema.sql"))
+    fn create_schema(&self, db: &Connection) -> SqlResult<()> {
+        db.execute_batch(include_str!("sql/create_schema.sql"))
     }
 
-    fn populate_table(&mut self, entries: Vec<impl InsertRow>) -> SqlResult<()> {
-        let transaction = self.db.transaction()?;
+    fn populate_table(&self, entries: Vec<impl InsertRow>, db: &mut Connection) -> SqlResult<()> {
+        let transaction = db.transaction()?;
         for entry in entries {
             entry.insert(&transaction)?;
         }
@@ -142,8 +154,8 @@ impl DatabaseFile {
     }
 }
 impl File for DatabaseFile {
-    fn dir() -> PathBuf {
-        app_directory_data("")
+    fn path() -> PathBuf {
+        app_directory_data("resource.db")
     }
 
     fn get_path(&self) -> &PathBuf {

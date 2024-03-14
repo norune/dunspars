@@ -5,14 +5,13 @@ use crate::api::game_to_gen;
 use crate::models::resource::{AbilityRow, GameRow, MoveRow, PokemonRow, Resource, TypeRow};
 use crate::models::{Ability, Move, Pokemon, PokemonData, Type};
 use crate::resource::DatabaseFile;
+use crate::VERSION;
 use display::*;
 
 use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
 use indoc::{formatdoc, printdoc};
 use rusqlite::Connection;
-
-const VERSION: &str = env!("DUNSPARS_VERSION");
 
 #[derive(Parser)]
 #[command(author, version = VERSION, about, long_about = None)]
@@ -120,9 +119,10 @@ pub async fn run() -> Result<()> {
         config_builder = config_builder.color_enabled(false);
     }
 
-    let db_file = DatabaseFile::try_new(false)?;
-    let config = config_builder.build(&db_file.db)?;
-    let program = Program::new(config, db_file);
+    let db_file = DatabaseFile::default();
+    let db = db_file.connect()?;
+    let config = config_builder.build(&db)?;
+    let mut program = Program::new(config, db_file, db);
 
     match cli.command {
         Commands::Setup => program.run_setup().await?,
@@ -211,21 +211,25 @@ struct Config {
 struct Program {
     config: Config,
     db_file: DatabaseFile,
+    db: Connection,
 }
 
 impl Program {
-    pub fn new(config: Config, db_file: DatabaseFile) -> Self {
-        Self { config, db_file }
+    pub fn new(config: Config, db_file: DatabaseFile, db: Connection) -> Self {
+        Self {
+            config,
+            db_file,
+            db,
+        }
     }
 
     async fn run_pokemon(&self, name: String, moves: bool, evolution: bool) -> Result<String> {
-        let pokemon_name = PokemonRow::validate(&name, &self.db_file.db)?;
+        let pokemon_name = PokemonRow::validate(&name, &self.db)?;
 
-        let pokemon =
-            PokemonData::from_name(&pokemon_name, self.config.generation, &self.db_file.db)?;
+        let pokemon = PokemonData::from_name(&pokemon_name, self.config.generation, &self.db)?;
         let pokemon_display = DisplayComponent::new(&pokemon, self.config.color_enabled);
 
-        let defense_chart = pokemon.get_defense_chart(&self.db_file.db)?;
+        let defense_chart = pokemon.get_defense_chart(&self.db)?;
         let defense_chart_ctx = TypeChartComponent {
             type_chart: &defense_chart,
         };
@@ -241,7 +245,7 @@ impl Program {
         };
 
         if evolution {
-            let evolution_step = pokemon.get_evolution_steps(&self.db_file.db)?;
+            let evolution_step = pokemon.get_evolution_steps(&self.db)?;
             let evolution_step_display =
                 DisplayComponent::new(&evolution_step, self.config.color_enabled);
             output += formatdoc! {
@@ -254,7 +258,7 @@ impl Program {
         }
 
         if moves {
-            let moves = pokemon.get_moves(&self.db_file.db)?;
+            let moves = pokemon.get_moves(&self.db)?;
             let move_list_context = MoveListComponent {
                 move_list: &moves,
                 pokemon: &pokemon,
@@ -275,13 +279,13 @@ impl Program {
     }
 
     async fn run_type(&self, name: String) -> Result<String> {
-        let type_name = TypeRow::validate(&name, &self.db_file.db)?;
+        let type_name = TypeRow::validate(&name, &self.db)?;
 
         let Type {
             offense_chart,
             defense_chart,
             ..
-        } = Type::from_name(&type_name, self.config.generation, &self.db_file.db)?;
+        } = Type::from_name(&type_name, self.config.generation, &self.db)?;
 
         let offense_chart_ctx = TypeChartComponent {
             type_chart: &offense_chart,
@@ -313,21 +317,21 @@ impl Program {
         verbose: bool,
         stab_only: bool,
     ) -> Result<String> {
-        let attacker_name = PokemonRow::validate(&attacker_name, &self.db_file.db)?;
+        let attacker_name = PokemonRow::validate(&attacker_name, &self.db)?;
         let attacker_data =
-            PokemonData::from_name(&attacker_name, self.config.generation, &self.db_file.db)?;
-        let attacker_moves = attacker_data.get_moves(&self.db_file.db)?;
-        let attacker_chart = attacker_data.get_defense_chart(&self.db_file.db)?;
+            PokemonData::from_name(&attacker_name, self.config.generation, &self.db)?;
+        let attacker_moves = attacker_data.get_moves(&self.db)?;
+        let attacker_chart = attacker_data.get_defense_chart(&self.db)?;
         let attacker = Pokemon::new(attacker_data, attacker_chart, attacker_moves);
 
         let mut defenders = vec![];
 
         for defender_name in defender_names {
-            let defender_name = PokemonRow::validate(&defender_name, &self.db_file.db)?;
+            let defender_name = PokemonRow::validate(&defender_name, &self.db)?;
             let defender_data =
-                PokemonData::from_name(&defender_name, self.config.generation, &self.db_file.db)?;
-            let defender_moves = defender_data.get_moves(&self.db_file.db)?;
-            let defender_chart = defender_data.get_defense_chart(&self.db_file.db)?;
+                PokemonData::from_name(&defender_name, self.config.generation, &self.db)?;
+            let defender_moves = defender_data.get_moves(&self.db)?;
+            let defender_chart = defender_data.get_defense_chart(&self.db)?;
             let defender = Pokemon::new(defender_data, defender_chart, defender_moves);
 
             defenders.push(defender);
@@ -360,10 +364,10 @@ impl Program {
         let mut pokemon = vec![];
 
         for name in names {
-            let name = PokemonRow::validate(&name, &self.db_file.db)?;
-            let data = PokemonData::from_name(&name, self.config.generation, &self.db_file.db)?;
-            let moves = data.get_moves(&self.db_file.db)?;
-            let chart = data.get_defense_chart(&self.db_file.db)?;
+            let name = PokemonRow::validate(&name, &self.db)?;
+            let data = PokemonData::from_name(&name, self.config.generation, &self.db)?;
+            let moves = data.get_moves(&self.db)?;
+            let chart = data.get_defense_chart(&self.db)?;
 
             let mon = Pokemon::new(data, chart, moves);
             pokemon.push(mon);
@@ -371,7 +375,7 @@ impl Program {
 
         let coverage_ctx = CoverageComponent {
             pokemon: &pokemon,
-            db: &self.db_file.db,
+            db: &self.db,
         };
         let coverage_display = DisplayComponent::new(coverage_ctx, self.config.color_enabled);
 
@@ -383,9 +387,9 @@ impl Program {
     }
 
     async fn run_move(&self, name: String) -> Result<String> {
-        let move_name = MoveRow::validate(&name, &self.db_file.db)?;
+        let move_name = MoveRow::validate(&name, &self.db)?;
 
-        let move_ = Move::from_name(&move_name, self.config.generation, &self.db_file.db)?;
+        let move_ = Move::from_name(&move_name, self.config.generation, &self.db)?;
         let move_display = DisplayComponent::new(&move_, self.config.color_enabled);
 
         let output = formatdoc! {
@@ -398,9 +402,9 @@ impl Program {
     }
 
     async fn run_ability(&self, name: String) -> Result<String> {
-        let ability_name = AbilityRow::validate(&name, &self.db_file.db)?;
+        let ability_name = AbilityRow::validate(&name, &self.db)?;
 
-        let ability = Ability::from_name(&ability_name, self.config.generation, &self.db_file.db)?;
+        let ability = Ability::from_name(&ability_name, self.config.generation, &self.db)?;
         let ability_display = DisplayComponent::new(&ability, self.config.color_enabled);
 
         let output = formatdoc! {
@@ -415,11 +419,11 @@ impl Program {
     async fn run_resource(&self, resource: ResourceArgs, delimiter: Option<String>) -> Result<()> {
         let delimiter = delimiter.unwrap_or("\n".to_string());
         let resource = match resource {
-            ResourceArgs::Pokemon => PokemonRow::resource(&self.db_file.db).join(&delimiter),
-            ResourceArgs::Moves => MoveRow::resource(&self.db_file.db).join(&delimiter),
-            ResourceArgs::Abilities => AbilityRow::resource(&self.db_file.db).join(&delimiter),
-            ResourceArgs::Types => TypeRow::resource(&self.db_file.db).join(&delimiter),
-            ResourceArgs::Games => GameRow::resource(&self.db_file.db).join(&delimiter),
+            ResourceArgs::Pokemon => PokemonRow::resource(&self.db).join(&delimiter),
+            ResourceArgs::Moves => MoveRow::resource(&self.db).join(&delimiter),
+            ResourceArgs::Abilities => AbilityRow::resource(&self.db).join(&delimiter),
+            ResourceArgs::Types => TypeRow::resource(&self.db).join(&delimiter),
+            ResourceArgs::Games => GameRow::resource(&self.db).join(&delimiter),
         };
 
         printdoc! {
@@ -431,9 +435,8 @@ impl Program {
         Ok(())
     }
 
-    async fn run_setup(&self) -> Result<()> {
-        let mut db = DatabaseFile::try_new(true)?;
-        db.build_db().await
+    async fn run_setup(&mut self) -> Result<()> {
+        self.db_file.build_db(&mut self.db).await
     }
 }
 
@@ -442,13 +445,16 @@ mod tests {
     use super::*;
 
     async fn setup_program(game: &str) -> Program {
-        let db_file = DatabaseFile::try_new(false).unwrap();
+        let db_file = DatabaseFile::default();
+        let db = db_file.connect().unwrap();
+
         let config = ConfigBuilder::new()
             .game(String::from(game))
             .color_enabled(false)
-            .build(&db_file.db)
+            .build(&db)
             .unwrap();
-        Program::new(config, db_file)
+
+        Program::new(config, db_file, db)
     }
 
     #[tokio::test]
