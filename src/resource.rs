@@ -139,7 +139,8 @@ impl DatabaseFile {
                     Ok(db)
                 } else {
                     bail!(
-                        "Database version '{}' mismatch. Run `dunspars setup` again.",
+                        "Database version mismatch. Program version: {0}; Database version: {1}. Run `dunspars setup` again.",
+                        VERSION,
                         db_version.value
                     );
                 }

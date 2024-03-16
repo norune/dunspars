@@ -39,7 +39,7 @@ jobs:
         cd ../..
 
     - name: test
-      run: cargo test --verbose
+      run: cargo test --config $RELEASE_CONFIG --verbose
 
     - name: archive
       run: tar -czvf dunspars_$RELEASE_VERSION.tar.gz -C target/release dunspars ../../README.md ../../LICENSE
