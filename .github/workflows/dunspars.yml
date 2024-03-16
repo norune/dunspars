@@ -32,6 +32,12 @@ jobs:
     - name: build
       run: cargo build --config $RELEASE_CONFIG --release --verbose
 
+    - name: setup
+      run: |
+        cd target/release
+        ./dunspars setup
+        cd ../..
+
     - name: test
       run: cargo test --verbose
 

@@ -58,7 +58,7 @@ pub trait FetchEntries: FetchIdentifiers {
     ) -> Result<Vec<Self::Entry>> {
         // Entry retrieval needs to be done in chunks because sending too many TCP requests
         // concurrently can cause "tcp open error: Too many open files (os error 24)"
-        let chunked_identifiers = identifiers.chunks(200);
+        let chunked_identifiers = identifiers.chunks(100);
         let mut entries = vec![];
 
         for chunk in chunked_identifiers {
