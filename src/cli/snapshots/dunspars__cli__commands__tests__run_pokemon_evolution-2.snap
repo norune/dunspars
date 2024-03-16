@@ -1,5 +1,5 @@
 ---
-source: src/cli.rs
+source: src/cli/commands.rs
 description: pokemon politoed --evolution --game sword-shield
 ---
 politoed water 

@@ -453,7 +453,7 @@ fn url_gen_regex() -> &'static Regex {
     })
 }
 
-fn capture_url_id(url: &str) -> Result<i64> {
+pub fn capture_url_id(url: &str) -> Result<i64> {
     if let Some(caps) = url_id_regex().captures(url) {
         Ok(caps["id"].parse::<i64>()?)
     } else {

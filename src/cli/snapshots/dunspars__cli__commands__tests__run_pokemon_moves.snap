@@ -1,5 +1,5 @@
 ---
-source: src/cli.rs
+source: src/cli/commands.rs
 description: pokemon blaziken --moves --game scarlet-violet
 ---
 blaziken fire fighting 

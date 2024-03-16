@@ -10,7 +10,51 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Result};
-use rusqlite::{Connection, Result as SqlResult};
+use rusqlite::{Connection, OpenFlags, Result as SqlResult};
+use rustemon::client::RustemonClient;
+
+#[derive(Default)]
+pub struct ConfigBuilder {
+    game: Option<String>,
+    color_enabled: Option<bool>,
+    db_dir: Option<PathBuf>,
+}
+
+impl ConfigBuilder {
+    pub fn game(mut self, game: String) -> Self {
+        self.game = Some(game);
+        self
+    }
+
+    pub fn color_enabled(mut self, color_enabled: bool) -> Self {
+        self.color_enabled = Some(color_enabled);
+        self
+    }
+
+    #[allow(dead_code)]
+    pub fn db_dir(mut self, db_dir: PathBuf) -> Self {
+        self.db_dir = Some(db_dir);
+        self
+    }
+
+    pub fn build(self) -> Result<Config> {
+        let color_enabled = self.color_enabled.unwrap_or(false);
+        let db_dir = self.db_dir.unwrap_or(app_data_directory(""));
+
+        Ok(Config {
+            game: self.game,
+            color_enabled,
+            db_dir,
+        })
+    }
+}
+
+#[derive(Clone)]
+pub struct Config {
+    pub game: Option<String>,
+    pub color_enabled: bool,
+    pub db_dir: PathBuf,
+}
 
 enum AppDirectories {
     Cache,
@@ -28,13 +72,13 @@ impl std::fmt::Display for AppDirectories {
     }
 }
 
-pub fn app_directory_cache(target_dir: &str) -> PathBuf {
+pub fn app_cache_directory(target_dir: &str) -> PathBuf {
     app_directory(AppDirectories::Cache, target_dir)
 }
-pub fn app_directory_data(target_dir: &str) -> PathBuf {
+pub fn app_data_directory(target_dir: &str) -> PathBuf {
     app_directory(AppDirectories::Data, target_dir)
 }
-pub fn app_directory_config(target_dir: &str) -> PathBuf {
+pub fn app_config_directory(target_dir: &str) -> PathBuf {
     app_directory(AppDirectories::Config, target_dir)
 }
 
@@ -61,7 +105,7 @@ pub trait File {
     }
 
     fn get_path(&self) -> &PathBuf;
-    fn path() -> PathBuf;
+    fn file_name() -> &'static str;
 }
 
 fn path_exists(path: &Path) -> bool {
@@ -75,74 +119,101 @@ fn path_exists(path: &Path) -> bool {
 pub struct DatabaseFile {
     path: PathBuf,
 }
-impl Default for DatabaseFile {
-    fn default() -> Self {
-        Self { path: Self::path() }
-    }
-}
 impl DatabaseFile {
-    pub fn connect(&self) -> Result<Connection> {
-        self.build_dir()?;
-        let db = Connection::open(&self.path)?;
+    pub fn new(mut dir: PathBuf) -> Self {
+        dir.push(Self::file_name());
+        Self { path: dir }
+    }
 
-        let meta = MetaRow::select_by_name("version", &db);
-        if let Ok(db_version) = meta {
-            if db_version.value == VERSION {
-                Ok(db)
+    pub fn connect(&self) -> Result<Connection> {
+        let mut flags = OpenFlags::default();
+        flags.set(OpenFlags::SQLITE_OPEN_READ_WRITE, false);
+        flags.set(OpenFlags::SQLITE_OPEN_CREATE, false);
+        flags.set(OpenFlags::SQLITE_OPEN_READ_ONLY, true);
+
+        let open = Connection::open_with_flags(&self.path, flags);
+        if let Ok(db) = open {
+            let meta = MetaRow::select_by_name("version", &db);
+            if let Ok(db_version) = meta {
+                if db_version.value == VERSION {
+                    Ok(db)
+                } else {
+                    bail!(
+                        "Database version '{}' mismatch. Run `dunspars setup` again.",
+                        db_version.value
+                    );
+                }
             } else {
-                bail!(
-                    "Database version '{}' mismatch. Run `dunspars setup` again.",
-                    db_version.value
-                );
+                bail!("Database malformed. Run `dunspars setup` again.")
             }
         } else {
-            bail!("Database not set up. Run `dunspars setup` first.");
+            bail!("Database not set up. Run `dunspars setup` first.")
         }
     }
 
-    pub async fn build_db(&self, db: &mut Connection) -> Result<()> {
+    pub async fn build_db(&self, writer: &mut impl std::io::Write) -> Result<()> {
+        self.build_dir()?;
+        if path_exists(&self.path) {
+            fs::remove_file(&self.path)?;
+        }
+
         let api = api_client();
-        fs::remove_file(&self.path)?;
-        self.create_schema(db)?;
+        let mut db = Connection::open(&self.path)?;
 
-        println!("retrieving games");
-        let games = GameFetcher::fetch_resource(&api, db).await?;
-        self.populate_table(games, db)?;
+        let start = std::time::Instant::now();
 
-        println!("retrieving moves");
-        let moves = MoveFetcher::fetch_resource(&api, db).await?;
-        self.populate_table(moves, db)?;
+        self.create_schema(&db)?;
 
-        println!("retrieving types");
-        let types = TypeFetcher::fetch_resource(&api, db).await?;
-        self.populate_table(types, db)?;
+        // Games must always be retrieved first as game-to-generation
+        // conversion data is needed for the other tables.
+        writeln!(writer, "retrieving games")?;
+        self.fetch_and_populate::<GameFetcher>(&api, &mut db)
+            .await?;
 
-        println!("retrieving abilities");
-        let abilities = AbilityFetcher::fetch_resource(&api, db).await?;
-        self.populate_table(abilities, db)?;
+        writeln!(writer, "retrieving moves")?;
+        self.fetch_and_populate::<MoveFetcher>(&api, &mut db)
+            .await?;
 
-        println!("retrieving species");
-        let species = SpeciesFetcher::fetch_resource(&api, db).await?;
-        println!("retrieving evolution");
-        let evolutions = EvolutionFetcher::fetch_resource(&species, &api, db).await?;
-        self.populate_table(species, db)?;
-        self.populate_table(evolutions, db)?;
+        writeln!(writer, "retrieving types")?;
+        self.fetch_and_populate::<TypeFetcher>(&api, &mut db)
+            .await?;
 
-        println!("retrieving pokemon");
-        let pokemon = PokemonFetcher::fetch_resource(&api, db).await?;
-        self.populate_table(pokemon, db)?;
+        writeln!(writer, "retrieving abilities")?;
+        self.fetch_and_populate::<AbilityFetcher>(&api, &mut db)
+            .await?;
 
-        let meta = vec![MetaRow {
-            name: String::from("version"),
-            value: String::from(VERSION),
-        }];
-        self.populate_table(meta, db)?;
+        writeln!(writer, "retrieving species")?;
+        self.fetch_and_populate::<SpeciesFetcher>(&api, &mut db)
+            .await?;
+
+        writeln!(writer, "retrieving evolution")?;
+        self.fetch_and_populate::<EvolutionFetcher>(&api, &mut db)
+            .await?;
+
+        writeln!(writer, "retrieving pokemon")?;
+        self.fetch_and_populate::<PokemonFetcher>(&api, &mut db)
+            .await?;
+
+        self.populate_meta(&mut db)?;
+
+        let duration = start.elapsed();
+        writeln!(writer, "setup time: {}s", duration.as_secs())?;
 
         Ok(())
     }
 
     fn create_schema(&self, db: &Connection) -> SqlResult<()> {
         db.execute_batch(include_str!("sql/create_schema.sql"))
+    }
+
+    async fn fetch_and_populate<T: FetchResource>(
+        &self,
+        api: &RustemonClient,
+        db: &mut Connection,
+    ) -> Result<()> {
+        let rows = T::fetch_resource(api, db).await?;
+        self.populate_table(rows, db)?;
+        Ok(())
     }
 
     fn populate_table(&self, entries: Vec<impl InsertRow>, db: &mut Connection) -> SqlResult<()> {
@@ -152,10 +223,18 @@ impl DatabaseFile {
         }
         transaction.commit()
     }
+
+    fn populate_meta(&self, db: &mut Connection) -> SqlResult<()> {
+        let meta = vec![MetaRow {
+            name: String::from("version"),
+            value: String::from(VERSION),
+        }];
+        self.populate_table(meta, db)
+    }
 }
 impl File for DatabaseFile {
-    fn path() -> PathBuf {
-        app_directory_data("resource.db")
+    fn file_name() -> &'static str {
+        "resource.db"
     }
 
     fn get_path(&self) -> &PathBuf {

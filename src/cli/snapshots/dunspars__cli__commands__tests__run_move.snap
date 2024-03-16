@@ -1,5 +1,5 @@
 ---
-source: src/cli.rs
+source: src/cli/commands.rs
 description: move brick-break --game sun-moon
 ---
 brick-break

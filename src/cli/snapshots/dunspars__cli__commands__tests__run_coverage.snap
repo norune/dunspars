@@ -1,5 +1,5 @@
 ---
-source: src/cli.rs
+source: src/cli/commands.rs
 description: coverage flamigo cramorant ribombee ogerpon-cornerstone-mask dudunsparce sinistcha --game the-indigo-disk
 ---
 offense coverage

@@ -707,10 +707,11 @@ impl From<GameRow> for Game {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::resource::DatabaseFile;
+    use crate::resource::{ConfigBuilder, DatabaseFile};
 
     fn db() -> Connection {
-        let db_file = DatabaseFile::default();
+        let config = ConfigBuilder::default().build().unwrap();
+        let db_file = DatabaseFile::new(config.db_dir);
         db_file.connect().unwrap()
     }
 

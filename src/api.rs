@@ -1,12 +1,12 @@
 mod convert;
 
 use crate::models::resource::{
-    AbilityRow, EvolutionRow, GameRow, MoveChangeRow, MoveRow, MoveRowGroup, PokemonAbilityRow,
-    PokemonMoveRow, PokemonRow, PokemonRowGroup, PokemonTypeChangeRow, SelectRow, SpeciesRow,
-    TypeChangeRow, TypeRow, TypeRowGroup,
+    AbilityRow, EvolutionRow, GameRow, InsertRow, MoveChangeRow, MoveRow, MoveRowGroup,
+    PokemonAbilityRow, PokemonMoveRow, PokemonRow, PokemonRowGroup, PokemonTypeChangeRow,
+    SelectRow, SpeciesRow, TypeChangeRow, TypeRow, TypeRowGroup,
 };
 use crate::models::EvolutionStep;
-use convert::FromChange;
+use convert::{capture_url_id, FromChange};
 
 use std::collections::HashSet;
 
@@ -42,13 +42,20 @@ pub fn game_to_gen(game: &str, db: &Connection) -> u8 {
 }
 
 #[allow(async_fn_in_trait)]
-pub trait FetchIdentifiers<I> {
-    async fn fetch_all_identifiers(client: &RustemonClient) -> Result<Vec<I>>;
+pub trait FetchIdentifiers {
+    type Identifier;
+
+    async fn fetch_all_identifiers(client: &RustemonClient) -> Result<Vec<Self::Identifier>>;
 }
 
 #[allow(async_fn_in_trait)]
-pub trait FetchEntries<I, E> {
-    async fn fetch_all_entries(identifiers: Vec<I>, client: &RustemonClient) -> Result<Vec<E>> {
+pub trait FetchEntries: FetchIdentifiers {
+    type Entry;
+
+    async fn fetch_all_entries(
+        identifiers: Vec<Self::Identifier>,
+        client: &RustemonClient,
+    ) -> Result<Vec<Self::Entry>> {
         // Entry retrieval needs to be done in chunks because sending too many TCP requests
         // concurrently can cause "tcp open error: Too many open files (os error 24)"
         let chunked_identifiers = identifiers.chunks(200);
@@ -67,18 +74,21 @@ pub trait FetchEntries<I, E> {
 
         Ok(entries)
     }
-    async fn fetch_entry(identifier: &I, client: &RustemonClient) -> Result<E>;
+    async fn fetch_entry(
+        identifier: &Self::Identifier,
+        client: &RustemonClient,
+    ) -> Result<Self::Entry>;
 }
 
-pub trait ConvertEntries<E, R> {
-    fn convert_to_rows(entries: Vec<E>, db: &Connection) -> Vec<R>;
+pub trait ConvertEntries: FetchEntries {
+    type Row: InsertRow;
+
+    fn convert_to_rows(entries: Vec<Self::Entry>, db: &Connection) -> Vec<Self::Row>;
 }
 
 #[allow(async_fn_in_trait)]
-pub trait FetchResource<I, E, R>:
-    FetchIdentifiers<I> + FetchEntries<I, E> + ConvertEntries<E, R>
-{
-    async fn fetch_resource(client: &RustemonClient, db: &Connection) -> Result<Vec<R>> {
+pub trait FetchResource: FetchIdentifiers + FetchEntries + ConvertEntries {
+    async fn fetch_resource(client: &RustemonClient, db: &Connection) -> Result<Vec<Self::Row>> {
         let names = Self::fetch_all_identifiers(client).await?;
         let entries = Self::fetch_all_entries(names, client).await?;
         Ok(Self::convert_to_rows(entries, db))
@@ -86,7 +96,9 @@ pub trait FetchResource<I, E, R>:
 }
 
 pub struct GameFetcher;
-impl FetchIdentifiers<String> for GameFetcher {
+impl FetchIdentifiers for GameFetcher {
+    type Identifier = String;
+
     async fn fetch_all_identifiers(client: &RustemonClient) -> Result<Vec<String>> {
         Ok(rustemon_version::get_all_entries(client)
             .await?
@@ -95,12 +107,16 @@ impl FetchIdentifiers<String> for GameFetcher {
             .collect::<Vec<String>>())
     }
 }
-impl FetchEntries<String, VersionGroup> for GameFetcher {
+impl FetchEntries for GameFetcher {
+    type Entry = VersionGroup;
+
     async fn fetch_entry(identifier: &String, client: &RustemonClient) -> Result<VersionGroup> {
         Ok(rustemon_version::get_by_name(identifier, client).await?)
     }
 }
-impl ConvertEntries<VersionGroup, GameRow> for GameFetcher {
+impl ConvertEntries for GameFetcher {
+    type Row = GameRow;
+
     fn convert_to_rows(entries: Vec<VersionGroup>, _db: &Connection) -> Vec<GameRow> {
         entries
             .into_iter()
@@ -108,10 +124,12 @@ impl ConvertEntries<VersionGroup, GameRow> for GameFetcher {
             .collect::<Vec<GameRow>>()
     }
 }
-impl FetchResource<String, VersionGroup, GameRow> for GameFetcher {}
+impl FetchResource for GameFetcher {}
 
 pub struct MoveFetcher;
-impl FetchIdentifiers<String> for MoveFetcher {
+impl FetchIdentifiers for MoveFetcher {
+    type Identifier = String;
+
     async fn fetch_all_identifiers(client: &RustemonClient) -> Result<Vec<String>> {
         Ok(rustemon_move::get_all_entries(client)
             .await?
@@ -120,12 +138,16 @@ impl FetchIdentifiers<String> for MoveFetcher {
             .collect::<Vec<String>>())
     }
 }
-impl FetchEntries<String, Move> for MoveFetcher {
+impl FetchEntries for MoveFetcher {
+    type Entry = Move;
+
     async fn fetch_entry(identifier: &String, client: &RustemonClient) -> Result<Move> {
         Ok(rustemon_move::get_by_name(identifier, client).await?)
     }
 }
-impl ConvertEntries<Move, MoveRowGroup> for MoveFetcher {
+impl ConvertEntries for MoveFetcher {
+    type Row = MoveRowGroup;
+
     fn convert_to_rows(entries: Vec<Move>, db: &Connection) -> Vec<MoveRowGroup> {
         let mut move_data = vec![];
 
@@ -142,10 +164,12 @@ impl ConvertEntries<Move, MoveRowGroup> for MoveFetcher {
         move_data
     }
 }
-impl FetchResource<String, Move, MoveRowGroup> for MoveFetcher {}
+impl FetchResource for MoveFetcher {}
 
 pub struct TypeFetcher;
-impl FetchIdentifiers<String> for TypeFetcher {
+impl FetchIdentifiers for TypeFetcher {
+    type Identifier = String;
+
     async fn fetch_all_identifiers(client: &RustemonClient) -> Result<Vec<String>> {
         Ok(rustemon_type::get_all_entries(client)
             .await?
@@ -154,12 +178,16 @@ impl FetchIdentifiers<String> for TypeFetcher {
             .collect::<Vec<String>>())
     }
 }
-impl FetchEntries<String, Type> for TypeFetcher {
+impl FetchEntries for TypeFetcher {
+    type Entry = Type;
+
     async fn fetch_entry(identifier: &String, client: &RustemonClient) -> Result<Type> {
         Ok(rustemon_type::get_by_name(identifier, client).await?)
     }
 }
-impl ConvertEntries<Type, TypeRowGroup> for TypeFetcher {
+impl ConvertEntries for TypeFetcher {
+    type Row = TypeRowGroup;
+
     fn convert_to_rows(entries: Vec<Type>, db: &Connection) -> Vec<TypeRowGroup> {
         let mut type_data = vec![];
         for type_ in entries {
@@ -174,10 +202,12 @@ impl ConvertEntries<Type, TypeRowGroup> for TypeFetcher {
         type_data
     }
 }
-impl FetchResource<String, Type, TypeRowGroup> for TypeFetcher {}
+impl FetchResource for TypeFetcher {}
 
 pub struct AbilityFetcher;
-impl FetchIdentifiers<String> for AbilityFetcher {
+impl FetchIdentifiers for AbilityFetcher {
+    type Identifier = String;
+
     async fn fetch_all_identifiers(client: &RustemonClient) -> Result<Vec<String>> {
         Ok(rustemon_ability::get_all_entries(client)
             .await?
@@ -186,12 +216,16 @@ impl FetchIdentifiers<String> for AbilityFetcher {
             .collect::<Vec<String>>())
     }
 }
-impl FetchEntries<String, Ability> for AbilityFetcher {
+impl FetchEntries for AbilityFetcher {
+    type Entry = Ability;
+
     async fn fetch_entry(identifier: &String, client: &RustemonClient) -> Result<Ability> {
         Ok(rustemon_ability::get_by_name(identifier, client).await?)
     }
 }
-impl ConvertEntries<Ability, AbilityRow> for AbilityFetcher {
+impl ConvertEntries for AbilityFetcher {
+    type Row = AbilityRow;
+
     fn convert_to_rows(entries: Vec<Ability>, _db: &Connection) -> Vec<AbilityRow> {
         entries
             .into_iter()
@@ -199,10 +233,12 @@ impl ConvertEntries<Ability, AbilityRow> for AbilityFetcher {
             .collect::<Vec<AbilityRow>>()
     }
 }
-impl FetchResource<String, Ability, AbilityRow> for AbilityFetcher {}
+impl FetchResource for AbilityFetcher {}
 
 pub struct SpeciesFetcher;
-impl FetchIdentifiers<String> for SpeciesFetcher {
+impl FetchIdentifiers for SpeciesFetcher {
+    type Identifier = String;
+
     async fn fetch_all_identifiers(client: &RustemonClient) -> Result<Vec<String>> {
         Ok(rustemon_species::get_all_entries(client)
             .await?
@@ -211,12 +247,16 @@ impl FetchIdentifiers<String> for SpeciesFetcher {
             .collect::<Vec<String>>())
     }
 }
-impl FetchEntries<String, PokemonSpecies> for SpeciesFetcher {
+impl FetchEntries for SpeciesFetcher {
+    type Entry = PokemonSpecies;
+
     async fn fetch_entry(identifier: &String, client: &RustemonClient) -> Result<PokemonSpecies> {
         Ok(rustemon_species::get_by_name(identifier, client).await?)
     }
 }
-impl ConvertEntries<PokemonSpecies, SpeciesRow> for SpeciesFetcher {
+impl ConvertEntries for SpeciesFetcher {
+    type Row = SpeciesRow;
+
     fn convert_to_rows(entries: Vec<PokemonSpecies>, _db: &Connection) -> Vec<SpeciesRow> {
         entries
             .into_iter()
@@ -224,15 +264,38 @@ impl ConvertEntries<PokemonSpecies, SpeciesRow> for SpeciesFetcher {
             .collect::<Vec<SpeciesRow>>()
     }
 }
-impl FetchResource<String, PokemonSpecies, SpeciesRow> for SpeciesFetcher {}
+impl FetchResource for SpeciesFetcher {}
 
 pub struct EvolutionFetcher;
-impl FetchEntries<i64, EvolutionChain> for EvolutionFetcher {
+impl FetchIdentifiers for EvolutionFetcher {
+    type Identifier = i64;
+
+    async fn fetch_all_identifiers(client: &RustemonClient) -> Result<Vec<i64>> {
+        // rustemon::evolution::evolution_chain::get_all_entries() is broken.
+        // Retrieve them instead via species resource instead.
+        let names = SpeciesFetcher::fetch_all_identifiers(client).await?;
+        let species = SpeciesFetcher::fetch_all_entries(names, client).await?;
+        let mut evolution_ids = HashSet::new();
+
+        for specie in species {
+            if let Some(evolution) = specie.evolution_chain {
+                evolution_ids.insert(capture_url_id(&evolution.url).unwrap());
+            }
+        }
+
+        Ok(evolution_ids.into_iter().collect())
+    }
+}
+impl FetchEntries for EvolutionFetcher {
+    type Entry = EvolutionChain;
+
     async fn fetch_entry(identifier: &i64, client: &RustemonClient) -> Result<EvolutionChain> {
         Ok(rustemon_evolution::get_by_id(*identifier, client).await?)
     }
 }
-impl ConvertEntries<EvolutionChain, EvolutionRow> for EvolutionFetcher {
+impl ConvertEntries for EvolutionFetcher {
+    type Row = EvolutionRow;
+
     fn convert_to_rows(entries: Vec<EvolutionChain>, _db: &Connection) -> Vec<EvolutionRow> {
         let mut evo_data = vec![];
         for evolution in entries {
@@ -247,31 +310,12 @@ impl ConvertEntries<EvolutionChain, EvolutionRow> for EvolutionFetcher {
         evo_data
     }
 }
-impl EvolutionFetcher {
-    pub async fn fetch_resource(
-        species: &[SpeciesRow],
-        client: &RustemonClient,
-        db: &Connection,
-    ) -> Result<Vec<EvolutionRow>> {
-        // rustemon::evolution::evolution_chain::get_all_entries() is broken.
-        // Retrieve them instead via species table foreign keys.
-        let mut evolution_ids = HashSet::new();
-        species.iter().for_each(|s| {
-            if let Some(evolution_id) = s.evolution_id {
-                evolution_ids.insert(evolution_id);
-            }
-        });
-
-        let entries =
-            EvolutionFetcher::fetch_all_entries(evolution_ids.into_iter().collect(), client)
-                .await?;
-
-        Ok(Self::convert_to_rows(entries, db))
-    }
-}
+impl FetchResource for EvolutionFetcher {}
 
 pub struct PokemonFetcher;
-impl FetchIdentifiers<String> for PokemonFetcher {
+impl FetchIdentifiers for PokemonFetcher {
+    type Identifier = String;
+
     async fn fetch_all_identifiers(client: &RustemonClient) -> Result<Vec<String>> {
         Ok(rustemon_pokemon::get_all_entries(client)
             .await?
@@ -280,12 +324,16 @@ impl FetchIdentifiers<String> for PokemonFetcher {
             .collect::<Vec<String>>())
     }
 }
-impl FetchEntries<String, Pokemon> for PokemonFetcher {
+impl FetchEntries for PokemonFetcher {
+    type Entry = Pokemon;
+
     async fn fetch_entry(identifier: &String, client: &RustemonClient) -> Result<Pokemon> {
         Ok(rustemon_pokemon::get_by_name(identifier, client).await?)
     }
 }
-impl ConvertEntries<Pokemon, PokemonRowGroup> for PokemonFetcher {
+impl ConvertEntries for PokemonFetcher {
+    type Row = PokemonRowGroup;
+
     fn convert_to_rows(entries: Vec<Pokemon>, db: &Connection) -> Vec<PokemonRowGroup> {
         let mut pokemon_data = vec![];
         for pokemon in entries {
@@ -315,4 +363,4 @@ impl ConvertEntries<Pokemon, PokemonRowGroup> for PokemonFetcher {
         pokemon_data
     }
 }
-impl FetchResource<String, Pokemon, PokemonRowGroup> for PokemonFetcher {}
+impl FetchResource for PokemonFetcher {}
