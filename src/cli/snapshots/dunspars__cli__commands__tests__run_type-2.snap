@@ -1,0 +1,20 @@
+---
+source: src/cli/commands.rs
+description: type ground water --game platinum
+---
+ground offense
+double: electric fire poison rock steel
+neutral: dark dragon fairy fighting ghost ground ice normal psychic water
+half: bug grass
+zero: flying
+
+water offense
+double: fire ground rock
+neutral: bug dark electric fairy fighting flying ghost ice normal poison psychic steel
+half: dragon grass water
+
+ground water defense
+quad: grass
+neutral: bug dark dragon fairy fighting flying ghost ground ice normal psychic water
+half: fire poison rock steel
+zero: electric

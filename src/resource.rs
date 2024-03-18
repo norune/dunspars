@@ -12,6 +12,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{bail, Result};
 use rusqlite::{Connection, OpenFlags, Result as SqlResult};
 use rustemon::client::RustemonClient;
+use semver::Version;
 
 #[derive(Default)]
 pub struct ConfigBuilder {
@@ -133,23 +134,28 @@ impl DatabaseFile {
 
         let open = Connection::open_with_flags(&self.path, flags);
         if let Ok(db) = open {
-            let meta = MetaRow::select_by_name("version", &db);
-            if let Ok(db_version) = meta {
-                if db_version.value == VERSION {
-                    Ok(db)
-                } else {
-                    bail!(
-                        "Database version mismatch. Program version: {0}; Database version: {1}. Run `dunspars setup` again.",
-                        VERSION,
-                        db_version.value
-                    );
-                }
-            } else {
-                bail!("Database malformed. Run `dunspars setup` again.")
-            }
-        } else {
-            bail!("Database not set up. Run `dunspars setup` first.")
+            return Self::version_check(db);
         }
+
+        bail!("Database not set up. Run `dunspars setup` first.")
+    }
+
+    fn version_check(db: Connection) -> Result<Connection> {
+        let meta = MetaRow::select_by_name("version", &db);
+
+        if let Ok(db_version) = meta {
+            if versions_within_minor_level(&db_version.value, VERSION).unwrap_or(false) {
+                return Ok(db);
+            }
+
+            bail!(
+                "Database version mismatch. Program version: {0}; Database version: {1}. Run `dunspars setup` again.",
+                VERSION,
+                db_version.value
+            )
+        }
+
+        bail!("Database malformed. Run `dunspars setup` again.")
     }
 
     pub async fn build_db(&self, writer: &mut impl std::io::Write) -> Result<()> {
@@ -240,5 +246,36 @@ impl File for DatabaseFile {
 
     fn get_path(&self) -> &PathBuf {
         &self.path
+    }
+}
+
+fn versions_within_minor_level(lhs: &str, rhs: &str) -> Result<bool> {
+    let left = Version::parse(lhs)?;
+    let right = Version::parse(rhs)?;
+
+    if left.major == right.major && left.minor == right.minor {
+        Ok(true)
+    } else {
+        Ok(false)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn versions_meet_criteria() {
+        let same_major_minor = versions_within_minor_level("1.2.3", "1.2.0").unwrap();
+        assert!(same_major_minor);
+
+        let different_major = versions_within_minor_level("1.2.0", "2.2.0").unwrap();
+        assert!(!different_major);
+
+        let different_minor = versions_within_minor_level("1.2.2", "1.3.2").unwrap();
+        assert!(!different_minor);
+
+        let parse_error = versions_within_minor_level("1.2.3", "1.23");
+        assert!(parse_error.is_err());
     }
 }

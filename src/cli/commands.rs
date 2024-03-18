@@ -119,40 +119,75 @@ impl Command for PokemonCommand {
 }
 
 pub struct TypeCommand {
-    pub name: String,
+    pub primary_type: String,
+    pub secondary_type: Option<String>,
+}
+impl TypeCommand {
+    fn get_type(type_name: &str, generation: u8, ctx: &DbContext) -> Result<Type> {
+        let type_name = ctx.validate::<TypeRow>(type_name)?;
+        let type_ = Type::from_name(&type_name, generation, &ctx.db)?;
+        Ok(type_)
+    }
 }
 impl Command for TypeCommand {
     async fn run(&self, config: Config, writer: &mut impl Write) -> Result<()> {
         let ctx = DbContext::try_new(config)?;
         let generation = ctx.get_generation()?;
 
-        let type_name = ctx.validate::<TypeRow>(&self.name)?;
-        let Type {
-            offense_chart,
-            defense_chart,
-            ..
-        } = Type::from_name(&type_name, generation, &ctx.db)?;
-
-        let offense_chart_ctx = TypeChartComponent {
-            type_chart: &offense_chart,
+        let primary_type = Self::get_type(&self.primary_type, generation, &ctx)?;
+        let primary_offense_ctx = TypeChartComponent {
+            type_chart: &primary_type.offense_chart,
         };
-        let offense_chart_display =
-            DisplayComponent::new(offense_chart_ctx, ctx.config.color_enabled);
+        let primary_offense_display =
+            DisplayComponent::new(primary_offense_ctx, ctx.config.color_enabled);
 
-        let defense_chart_ctx = TypeChartComponent {
-            type_chart: &defense_chart,
-        };
-        let defense_chart_display =
-            DisplayComponent::new(defense_chart_ctx, ctx.config.color_enabled);
+        let secondary_type = self
+            .secondary_type
+            .as_ref()
+            .map(|t| Self::get_type(t, generation, &ctx));
 
-        writedoc! {
-            writer,
-            "
-            {offense_chart_display}
+        match secondary_type {
+            Some(secondary_type) => {
+                let secondary_type = secondary_type?;
+                let secondary_offense_ctx = TypeChartComponent {
+                    type_chart: &secondary_type.offense_chart,
+                };
+                let secondary_offense_display =
+                    DisplayComponent::new(secondary_offense_ctx, ctx.config.color_enabled);
 
-            {defense_chart_display}
-            "
-        }?;
+                let combined_defense = primary_type.defense_chart + secondary_type.defense_chart;
+                let defense_ctx = TypeChartComponent {
+                    type_chart: &combined_defense,
+                };
+                let defense_display = DisplayComponent::new(defense_ctx, ctx.config.color_enabled);
+
+                writedoc! {
+                    writer,
+                    "
+                    {primary_offense_display}
+
+                    {secondary_offense_display}
+
+                    {defense_display}
+                    "
+                }?;
+            }
+            None => {
+                let defense_ctx = TypeChartComponent {
+                    type_chart: &primary_type.defense_chart,
+                };
+                let defense_display = DisplayComponent::new(defense_ctx, ctx.config.color_enabled);
+
+                writedoc! {
+                    writer,
+                    "
+                    {primary_offense_display}
+
+                    {defense_display}
+                    "
+                }?;
+            }
+        }
 
         Ok(())
     }
@@ -427,12 +462,26 @@ mod tests {
     async fn run_type() {
         let config = config("platinum");
         let ice = TypeCommand {
-            name: String::from("ice"),
+            primary_type: String::from("ice"),
+            secondary_type: None,
         };
-        let output = run_command(ice, config).await;
+        let output = run_command(ice, config.clone()).await;
 
         insta::with_settings!({
             description => "type ice --game platinum",
+            omit_expression => true
+        }, {
+            insta::assert_snapshot!(output);
+        });
+
+        let ground_water = TypeCommand {
+            primary_type: String::from("ground"),
+            secondary_type: Some(String::from("water")),
+        };
+        let output = run_command(ground_water, config.clone()).await;
+
+        insta::with_settings!({
+            description => "type ground water --game platinum",
             omit_expression => true
         }, {
             insta::assert_snapshot!(output);

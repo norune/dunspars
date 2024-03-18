@@ -72,7 +72,10 @@ Ubuntu 23.10
 Binaries for each version are included in the [releases](https://github.com/norune/dunspars/releases) section of this repo.
 
 ### Compile from Source
-Install [rustup](https://www.rust-lang.org/tools/install)
+Prerequisites
+- [rustup](https://www.rust-lang.org/tools/install)
+- [libsqlite3-dev](https://packages.ubuntu.com/mantic/libsqlite3-dev)
+
 ```
 cd dunspars
 cargo build --release

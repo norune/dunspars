@@ -65,10 +65,12 @@ enum Commands {
         #[arg(required = true, num_args = 1..=6)]
         pokemon: Vec<String>,
     },
-    /// Prints data about a Pokémon type
+    /// Prints type weakness and coverage about a Pokémon type or a combination of two
     Type {
-        /// Name of the type
-        type_: String,
+        /// Name of a type
+        primary_type: String,
+        /// Name of a secondary type. Optional
+        secondary_type: Option<String>,
     },
     /// Prints data about a Pokémon move
     Move {
@@ -141,8 +143,14 @@ async fn run_command(commands: Commands, config: Config) -> Result<()> {
             };
             cmd.run(config, &mut output).await
         }
-        Commands::Type { type_ } => {
-            let cmd = TypeCommand { name: type_ };
+        Commands::Type {
+            primary_type,
+            secondary_type,
+        } => {
+            let cmd = TypeCommand {
+                primary_type,
+                secondary_type,
+            };
             cmd.run(config, &mut output).await
         }
         Commands::Move { move_ } => {
