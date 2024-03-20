@@ -3,8 +3,11 @@ use std::process;
 
 #[tokio::main]
 async fn main() {
-    if let Err(e) = dunspars::cli::run().await {
+    let run = dunspars::cli::run().await;
+    if let Ok(code) = run {
+        process::exit(code)
+    } else if let Err(e) = run {
         eprintln!("{e}");
         process::exit(1);
-    };
+    }
 }

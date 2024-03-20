@@ -3,7 +3,8 @@ use super::ResourceArgs;
 use crate::api::game_to_gen;
 use crate::models::resource::{AbilityRow, GameRow, MoveRow, PokemonRow, Resource, TypeRow};
 use crate::models::{Ability, Move, Pokemon, PokemonData, Type};
-use crate::resource::{Config, DatabaseFile};
+use crate::resource::config::{Config, ConfigFile};
+use crate::resource::database::DatabaseFile;
 
 use std::io::Write;
 
@@ -17,7 +18,7 @@ struct DbContext {
 }
 impl DbContext {
     fn try_new(config: Config) -> Result<Self> {
-        let file = DatabaseFile::new(config.db_dir.clone());
+        let file = DatabaseFile::default();
         let db = file.connect()?;
 
         Ok(Self { db, config })
@@ -43,14 +44,15 @@ impl DbContext {
 }
 
 pub trait Command {
-    async fn run(&self, config: Config, writer: &mut impl Write) -> Result<()>;
+    async fn run(&self, config: Config, writer: &mut impl Write) -> Result<i32>;
 }
 
 pub struct SetupCommand;
 impl Command for SetupCommand {
-    async fn run(&self, config: Config, writer: &mut impl Write) -> Result<()> {
-        let file = DatabaseFile::new(config.db_dir);
-        file.build_db(writer).await
+    async fn run(&self, _config: Config, writer: &mut impl Write) -> Result<i32> {
+        let file = DatabaseFile::default();
+        file.build_db(writer).await?;
+        Ok(0)
     }
 }
 
@@ -60,7 +62,7 @@ pub struct PokemonCommand {
     pub evolution: bool,
 }
 impl Command for PokemonCommand {
-    async fn run(&self, config: Config, writer: &mut impl Write) -> Result<()> {
+    async fn run(&self, config: Config, writer: &mut impl Write) -> Result<i32> {
         let ctx = DbContext::try_new(config)?;
         let generation = ctx.get_generation()?;
 
@@ -114,7 +116,7 @@ impl Command for PokemonCommand {
             }?;
         }
 
-        Ok(())
+        Ok(0)
     }
 }
 
@@ -130,7 +132,7 @@ impl TypeCommand {
     }
 }
 impl Command for TypeCommand {
-    async fn run(&self, config: Config, writer: &mut impl Write) -> Result<()> {
+    async fn run(&self, config: Config, writer: &mut impl Write) -> Result<i32> {
         let ctx = DbContext::try_new(config)?;
         let generation = ctx.get_generation()?;
 
@@ -189,7 +191,7 @@ impl Command for TypeCommand {
             }
         }
 
-        Ok(())
+        Ok(0)
     }
 }
 
@@ -197,7 +199,7 @@ pub struct MoveCommand {
     pub name: String,
 }
 impl Command for MoveCommand {
-    async fn run(&self, config: Config, writer: &mut impl Write) -> Result<()> {
+    async fn run(&self, config: Config, writer: &mut impl Write) -> Result<i32> {
         let ctx = DbContext::try_new(config)?;
         let generation = ctx.get_generation()?;
 
@@ -212,7 +214,7 @@ impl Command for MoveCommand {
             "
         }?;
 
-        Ok(())
+        Ok(0)
     }
 }
 
@@ -220,7 +222,7 @@ pub struct AbilityCommand {
     pub name: String,
 }
 impl Command for AbilityCommand {
-    async fn run(&self, config: Config, writer: &mut impl Write) -> Result<()> {
+    async fn run(&self, config: Config, writer: &mut impl Write) -> Result<i32> {
         let ctx = DbContext::try_new(config)?;
         let generation = ctx.get_generation()?;
 
@@ -235,7 +237,7 @@ impl Command for AbilityCommand {
             "
         }?;
 
-        Ok(())
+        Ok(0)
     }
 }
 
@@ -247,7 +249,7 @@ pub struct MatchCommand {
     pub stab_only: bool,
 }
 impl Command for MatchCommand {
-    async fn run(&self, config: Config, writer: &mut impl Write) -> Result<()> {
+    async fn run(&self, config: Config, writer: &mut impl Write) -> Result<i32> {
         let ctx = DbContext::try_new(config)?;
         let generation = ctx.get_generation()?;
 
@@ -288,7 +290,7 @@ impl Command for MatchCommand {
             }?;
         }
 
-        Ok(())
+        Ok(0)
     }
 }
 
@@ -296,7 +298,7 @@ pub struct CoverageCommand {
     pub names: Vec<String>,
 }
 impl Command for CoverageCommand {
-    async fn run(&self, config: Config, writer: &mut impl Write) -> Result<()> {
+    async fn run(&self, config: Config, writer: &mut impl Write) -> Result<i32> {
         let ctx = DbContext::try_new(config)?;
         let generation = ctx.get_generation()?;
 
@@ -324,7 +326,7 @@ impl Command for CoverageCommand {
             "
         }?;
 
-        Ok(())
+        Ok(0)
     }
 }
 
@@ -333,7 +335,7 @@ pub struct ResourceCommand {
     pub delimiter: Option<String>,
 }
 impl Command for ResourceCommand {
-    async fn run(&self, config: Config, writer: &mut impl Write) -> Result<()> {
+    async fn run(&self, config: Config, writer: &mut impl Write) -> Result<i32> {
         let ctx = DbContext::try_new(config)?;
         let delimiter = self.delimiter.clone().unwrap_or("\n".to_string());
 
@@ -352,14 +354,37 @@ impl Command for ResourceCommand {
             "
         }?;
 
-        Ok(())
+        Ok(0)
+    }
+}
+
+pub struct ConfigCommand {
+    pub key: String,
+    pub value: Option<String>,
+    pub unset: bool,
+}
+impl Command for ConfigCommand {
+    async fn run(&self, _config: Config, writer: &mut impl Write) -> Result<i32> {
+        let mut config_file = ConfigFile::from_file()?;
+        if self.unset {
+            config_file.unset_value(&self.key);
+            config_file.save()?;
+        } else if let Some(value) = &self.value {
+            config_file.set_value(&self.key, value);
+            config_file.save()?;
+        } else if self.value.is_none() {
+            if let Some(value) = config_file.get_value(&self.key) {
+                writeln!(writer, "{value}")?;
+            }
+        }
+        Ok(0)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::resource::ConfigBuilder;
+    use crate::resource::config::ConfigBuilder;
 
     fn config(game: &str) -> Config {
         ConfigBuilder::default()

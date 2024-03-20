@@ -1,12 +1,12 @@
 mod commands;
 mod display;
-mod utils;
+pub mod utils;
 
-use crate::resource::{Config, ConfigBuilder};
+use crate::resource::config::{Config, ConfigBuilder};
 use crate::VERSION;
 use commands::{
-    AbilityCommand, Command, CoverageCommand, MatchCommand, MoveCommand, PokemonCommand,
-    ResourceCommand, SetupCommand, TypeCommand,
+    AbilityCommand, Command, ConfigCommand, CoverageCommand, MatchCommand, MoveCommand,
+    PokemonCommand, ResourceCommand, SetupCommand, TypeCommand,
 };
 
 use std::io::stdout;
@@ -91,6 +91,16 @@ enum Commands {
         #[arg(short, long)]
         delimiter: Option<String>,
     },
+    /// Program configuration
+    Config {
+        /// Name of the target configuration
+        key: String,
+        /// If provided, sets the target configuration to this value. If not, print its current value
+        value: Option<String>,
+        /// Unsets the target configuration
+        #[arg(short, long, action = clap::ArgAction::SetTrue)]
+        unset: bool,
+    },
 }
 
 #[derive(Clone, clap::ValueEnum)]
@@ -102,10 +112,10 @@ enum ResourceArgs {
     Types,
 }
 
-pub async fn run() -> Result<()> {
+pub async fn run() -> Result<i32> {
     let cli = Cli::parse();
 
-    let mut config_builder = ConfigBuilder::default();
+    let mut config_builder = ConfigBuilder::from_file()?;
     if let Some(game) = &cli.game {
         config_builder = config_builder.game(game.to_owned());
     }
@@ -113,19 +123,18 @@ pub async fn run() -> Result<()> {
         config_builder = config_builder.color_enabled(true);
     } else if cli.no_color {
         config_builder = config_builder.color_enabled(false);
-    } else {
-        config_builder = config_builder.color_enabled(utils::is_color_enabled());
     }
     let config = config_builder.build()?;
 
-    run_command(cli.command, config).await?;
-
-    Ok(())
+    let status_code = run_command(cli.command, config).await?;
+    Ok(status_code)
 }
 
-async fn run_command(commands: Commands, config: Config) -> Result<()> {
+async fn run_command(commands: Commands, config: Config) -> Result<i32> {
     let mut output = stdout().lock();
 
+    // Performing dynamic dispatch here, i.e. dyn Command.run(), doesn't work for some unknown reason.
+    // Rust produces error messages that obscure the actual reason: https://github.com/rust-lang/rust/issues/119502
     match commands {
         Commands::Setup => {
             let cmd = SetupCommand;
@@ -187,6 +196,10 @@ async fn run_command(commands: Commands, config: Config) -> Result<()> {
                 resource,
                 delimiter,
             };
+            cmd.run(config, &mut output).await
+        }
+        Commands::Config { key, value, unset } => {
+            let cmd = ConfigCommand { key, value, unset };
             cmd.run(config, &mut output).await
         }
     }
