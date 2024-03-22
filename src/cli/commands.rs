@@ -2,7 +2,7 @@ use super::display::*;
 use super::ResourceArgs;
 use crate::api::game_to_gen;
 use crate::models::resource::{AbilityRow, GameRow, MoveRow, PokemonRow, Resource, TypeRow};
-use crate::models::{Ability, Move, Pokemon, PokemonData, Type};
+use crate::models::{Ability, Move, Pokemon, Type};
 use crate::resource::config::{Config, ConfigFile};
 use crate::resource::database::DatabaseFile;
 
@@ -67,7 +67,7 @@ impl Command for PokemonCommand {
         let generation = ctx.get_generation()?;
 
         let pokemon_name = ctx.validate::<PokemonRow>(&self.name)?;
-        let pokemon = PokemonData::from_name(&pokemon_name, generation, &ctx.db)?;
+        let pokemon = Pokemon::from_name(&pokemon_name, generation, &ctx.db)?;
         let pokemon_display = DisplayComponent::new(&pokemon, ctx.config.color_enabled);
 
         let defense_chart = pokemon.get_defense_chart(&ctx.db)?;
@@ -99,7 +99,7 @@ impl Command for PokemonCommand {
         }
 
         if self.moves {
-            let moves = pokemon.get_moves(&ctx.db)?;
+            let moves = pokemon.get_move_data(&ctx.db)?;
             let move_list_context = MoveListComponent {
                 move_list: &moves,
                 pokemon: &pokemon,
@@ -254,19 +254,13 @@ impl Command for MatchCommand {
         let generation = ctx.get_generation()?;
 
         let attacker_name = ctx.validate::<PokemonRow>(&self.attacker_name)?;
-        let attacker_data = PokemonData::from_name(&attacker_name, generation, &ctx.db)?;
-        let attacker_moves = attacker_data.get_moves(&ctx.db)?;
-        let attacker_chart = attacker_data.get_defense_chart(&ctx.db)?;
-        let attacker = Pokemon::new(attacker_data, attacker_chart, attacker_moves);
+        let attacker = Pokemon::from_name(&attacker_name, generation, &ctx.db)?;
 
         let mut defenders = vec![];
 
         for defender_name in self.defender_names.iter() {
             let defender_name = ctx.validate::<PokemonRow>(defender_name)?;
-            let defender_data = PokemonData::from_name(&defender_name, generation, &ctx.db)?;
-            let defender_moves = defender_data.get_moves(&ctx.db)?;
-            let defender_chart = defender_data.get_defense_chart(&ctx.db)?;
-            let defender = Pokemon::new(defender_data, defender_chart, defender_moves);
+            let defender = Pokemon::from_name(&defender_name, generation, &ctx.db)?;
 
             defenders.push(defender);
         }
@@ -275,6 +269,7 @@ impl Command for MatchCommand {
             let match_context = MatchComponent {
                 defender: &defender,
                 attacker: &attacker,
+                db: &ctx.db,
                 verbose: self.verbose,
                 stab_only: self.stab_only,
             };
@@ -305,11 +300,7 @@ impl Command for CoverageCommand {
         let mut pokemon = vec![];
         for name in self.names.iter() {
             let name = ctx.validate::<PokemonRow>(name)?;
-            let data = PokemonData::from_name(&name, generation, &ctx.db)?;
-            let moves = data.get_moves(&ctx.db)?;
-            let chart = data.get_defense_chart(&ctx.db)?;
-
-            let mon = Pokemon::new(data, chart, moves);
+            let mon = Pokemon::from_name(&name, generation, &ctx.db)?;
             pokemon.push(mon);
         }
 

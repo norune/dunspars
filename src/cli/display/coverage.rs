@@ -72,25 +72,21 @@ impl DisplayComponent<CoverageComponent<'_>> {
             defense_coverage.insert(String::from(type_), vec![]);
         }
 
-        for Pokemon {
-            data,
-            defense_chart,
-            ..
-        } in pokemon
-        {
-            let pokemon_name = &data.name;
+        for pokemon in pokemon {
+            let defense_chart = pokemon.get_defense_chart(db).unwrap();
+            let pokemon_name = &pokemon.name;
 
             let Type { offense_chart, .. } =
-                Type::from_name(&data.primary_type, data.generation, db).unwrap();
+                Type::from_name(&pokemon.primary_type, pokemon.generation, db).unwrap();
             self.add_pokemon_to_coverage(pokemon_name, &offense_chart, &mut offense_coverage);
 
-            if let Some(secondary_type) = data.secondary_type.as_ref() {
+            if let Some(secondary_type) = pokemon.secondary_type.as_ref() {
                 let Type { offense_chart, .. } =
-                    Type::from_name(secondary_type, data.generation, db).unwrap();
+                    Type::from_name(secondary_type, pokemon.generation, db).unwrap();
                 self.add_pokemon_to_coverage(pokemon_name, &offense_chart, &mut offense_coverage);
             }
 
-            self.add_pokemon_to_coverage(pokemon_name, defense_chart, &mut defense_coverage);
+            self.add_pokemon_to_coverage(pokemon_name, &defense_chart, &mut defense_coverage);
         }
 
         (offense_coverage, defense_coverage)

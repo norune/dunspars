@@ -1,9 +1,9 @@
 pub mod resource;
 
 use resource::{
-    AbilityRow, EvolutionRow, FromRow, GameRow, MoveChangeRow, MoveRow, PokemonAbilityRow,
-    PokemonMoveRow, PokemonRow, PokemonTypeChangeRow, SelectChangeRow, SelectRow, SpeciesRow,
-    TypeChangeRow, TypeRow,
+    AbilityRow, CustomPokemonParams, EvolutionRow, FromRow, GameRow, MoveChangeRow, MoveRow,
+    PokemonAbilityRow, PokemonMoveRow, PokemonRow, PokemonTypeChangeRow, SelectChangeRow,
+    SelectRow, SpeciesRow, TypeChangeRow, TypeRow,
 };
 
 use std::collections::HashMap;
@@ -13,54 +13,60 @@ use anyhow::{bail, Result};
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 
-pub struct Pokemon {
-    pub data: PokemonData,
-    pub defense_chart: DefenseTypeChart,
-    pub move_list: MoveList,
-}
-
-impl Pokemon {
-    pub fn new(data: PokemonData, defense_chart: DefenseTypeChart, move_list: MoveList) -> Self {
-        Self {
-            data,
-            defense_chart,
-            move_list,
-        }
-    }
-}
-
 #[derive(Debug)]
-pub struct PokemonData {
+pub struct Pokemon {
     pub name: String,
+    pub nickname: String,
     pub primary_type: String,
     pub secondary_type: Option<String>,
-    pub learn_moves: Vec<(String, String, i64)>,
+    pub learnable_moves: Vec<(String, String, i64)>,
+    pub moves: Vec<String>,
     pub group: PokemonGroup,
     pub generation: u8,
     pub stats: Stats,
     pub abilities: Vec<(String, bool)>,
     pub species: String,
 }
-impl PokemonData {
+impl Pokemon {
     pub fn from_name(pokemon_name: &str, generation: u8, db: &Connection) -> Result<Self> {
         let pokemon_row = PokemonRow::select_by_name(pokemon_name, db)?;
-        PokemonData::from_row(pokemon_row, generation, db)
+        Pokemon::from_row(pokemon_row, generation, db)
     }
 
-    pub fn get_moves(&self, db: &Connection) -> Result<MoveList> {
-        let moves_results = self
-            .learn_moves
+    pub fn from_custom_params(
+        custom_pokemon: CustomPokemonParams,
+        db: &Connection,
+    ) -> Result<Self> {
+        let pokemon_row = PokemonRow::select_by_name(&custom_pokemon.base_pokemon, db)?;
+        let db_pokemon = Pokemon::from_row(pokemon_row, custom_pokemon.generation, db)?;
+
+        let primary_type = custom_pokemon
+            .primary_type
+            .unwrap_or(db_pokemon.primary_type);
+        let secondary_type = custom_pokemon.secondary_type.or(db_pokemon.secondary_type);
+
+        Ok(Pokemon {
+            name: db_pokemon.name,
+            nickname: custom_pokemon.nickname,
+            primary_type,
+            secondary_type,
+            learnable_moves: db_pokemon.learnable_moves,
+            moves: custom_pokemon.moves,
+            group: db_pokemon.group,
+            generation: db_pokemon.generation,
+            stats: db_pokemon.stats,
+            abilities: db_pokemon.abilities,
+            species: db_pokemon.species,
+        })
+    }
+
+    pub fn get_move_data(&self, db: &Connection) -> Result<MoveList> {
+        let move_list = self
+            .learnable_moves
             .iter()
-            .map(|mv| Move::from_name(&mv.0, self.generation, db))
-            .collect::<Vec<Result<Move>>>();
-
-        let mut moves = HashMap::new();
-        for move_ in moves_results {
-            let move_ = move_?;
-            moves.insert(move_.name.clone(), move_);
-        }
-
-        Ok(MoveList::new(moves))
+            .map(|m| m.0.as_str())
+            .collect::<Vec<&str>>();
+        MoveList::try_new(&move_list, self.generation, db)
     }
 
     pub fn get_defense_chart(&self, db: &Connection) -> Result<DefenseTypeChart> {
@@ -81,7 +87,7 @@ impl PokemonData {
         Ok(serde_json::from_str(&evolution_row.evolution)?)
     }
 }
-impl FromRow<PokemonRow> for PokemonData {
+impl FromRow<PokemonRow> for Pokemon {
     fn from_row(value: PokemonRow, current_gen: u8, db: &Connection) -> Result<Self> {
         let PokemonRow {
             id,
@@ -129,10 +135,12 @@ impl FromRow<PokemonRow> for PokemonData {
         let abilities = PokemonAbilityRow::select_by_pokemon(id, db)?;
 
         Ok(Self {
+            nickname: name.clone(),
             name,
             primary_type,
             secondary_type,
-            learn_moves,
+            learnable_moves: learn_moves,
+            moves: vec![],
             group,
             generation: current_gen,
             stats,
@@ -475,17 +483,23 @@ impl FromRow<MoveRow> for Move {
     }
 }
 
-pub struct MoveList {
-    value: HashMap<String, Move>,
-}
-
+pub struct MoveList(HashMap<String, Move>);
 impl MoveList {
-    pub fn new(hashmap: HashMap<String, Move>) -> MoveList {
-        MoveList { value: hashmap }
+    pub fn try_new(move_list: &[&str], generation: u8, db: &Connection) -> Result<Self> {
+        let mut move_data = HashMap::new();
+        for move_ in move_list {
+            let move_ = Move::from_name(move_, generation, db)?;
+            move_data.insert(move_.name.clone(), move_);
+        }
+        Ok(Self(move_data))
     }
 
-    pub fn get_map(&self) -> &HashMap<String, Move> {
-        &self.value
+    pub fn get_move(&self, move_name: &str) -> Option<&Move> {
+        self.0.get(move_name)
+    }
+
+    pub fn get_list(&self) -> &HashMap<String, Move> {
+        &self.0
     }
 }
 
@@ -719,15 +733,15 @@ mod tests {
         let db = db();
 
         // Ogerpon was not inroduced until gen 9
-        PokemonData::from_name("ogerpon", 8, &db).unwrap_err();
-        PokemonData::from_name("ogerpon", 9, &db).unwrap();
+        Pokemon::from_name("ogerpon", 8, &db).unwrap_err();
+        Pokemon::from_name("ogerpon", 9, &db).unwrap();
 
         // Wailord is not present in gen 9, but is present in gen 8
-        PokemonData::from_name("wailord", 9, &db).unwrap_err();
-        PokemonData::from_name("wailord", 8, &db).unwrap();
+        Pokemon::from_name("wailord", 9, &db).unwrap_err();
+        Pokemon::from_name("wailord", 8, &db).unwrap();
 
         // Test dual type defense chart
-        let golem = PokemonData::from_name("golem", 9, &db).unwrap();
+        let golem = Pokemon::from_name("golem", 9, &db).unwrap();
         let golem_defense = golem.get_defense_chart(&db).unwrap();
         assert_eq!(4.0, golem_defense.get_multiplier("water"));
         assert_eq!(2.0, golem_defense.get_multiplier("fighting"));
@@ -737,9 +751,9 @@ mod tests {
         assert_eq!(0.0, golem_defense.get_multiplier("electric"));
 
         // Clefairy was Normal type until gen 6
-        let clefairy_gen_5 = PokemonData::from_name("clefairy", 5, &db).unwrap();
+        let clefairy_gen_5 = Pokemon::from_name("clefairy", 5, &db).unwrap();
         assert_eq!("normal", clefairy_gen_5.primary_type);
-        let clefairy_gen_6 = PokemonData::from_name("clefairy", 6, &db).unwrap();
+        let clefairy_gen_6 = Pokemon::from_name("clefairy", 6, &db).unwrap();
         assert_eq!("fairy", clefairy_gen_6.primary_type);
     }
 
@@ -747,19 +761,19 @@ mod tests {
     fn get_pokemon_evolution() {
         let db = db();
 
-        let cascoon = PokemonData::from_name("cascoon", 3, &db)
+        let cascoon = Pokemon::from_name("cascoon", 3, &db)
             .unwrap()
             .get_evolution_steps(&db)
             .unwrap();
         insta::assert_yaml_snapshot!(cascoon);
 
-        let applin = PokemonData::from_name("applin", 9, &db)
+        let applin = Pokemon::from_name("applin", 9, &db)
             .unwrap()
             .get_evolution_steps(&db)
             .unwrap();
         insta::assert_yaml_snapshot!(applin);
 
-        let politoed = PokemonData::from_name("politoed", 9, &db)
+        let politoed = Pokemon::from_name("politoed", 9, &db)
             .unwrap()
             .get_evolution_steps(&db)
             .unwrap();

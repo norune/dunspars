@@ -724,3 +724,13 @@ impl SelectRow for MetaRow {
         })
     }
 }
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct CustomPokemonParams {
+    pub nickname: String,
+    pub base_pokemon: String,
+    pub primary_type: Option<String>,
+    pub secondary_type: Option<String>,
+    pub moves: Vec<String>,
+    pub generation: u8,
+}

@@ -1,6 +1,6 @@
 use super::{Colors, DisplayComponent};
 use crate::cli::utils::is_stab;
-use crate::models::{Move, MoveList, PokemonData};
+use crate::models::{Move, MoveList, Pokemon};
 
 use std::fmt;
 
@@ -8,7 +8,7 @@ use indoc::writedoc;
 
 pub struct MoveListComponent<'a> {
     pub move_list: &'a MoveList,
-    pub pokemon: &'a PokemonData,
+    pub pokemon: &'a Pokemon,
 }
 
 impl fmt::Display for DisplayComponent<MoveListComponent<'_>> {
@@ -20,7 +20,7 @@ impl fmt::Display for DisplayComponent<MoveListComponent<'_>> {
         )?;
 
         let MoveListComponent { pokemon, move_list } = self.context;
-        let mut learn_moves = pokemon.learn_moves.clone();
+        let mut learn_moves = pokemon.learnable_moves.clone();
 
         if learn_moves.is_empty() {
             write!(f, "\nThere are no moves to display.\n")?;
@@ -43,7 +43,7 @@ impl fmt::Display for DisplayComponent<MoveListComponent<'_>> {
                 damage_class,
                 type_,
                 ..
-            } = move_list.get_map().get(&name).unwrap();
+            } = move_list.get_move(&name).unwrap();
 
             let stab = if is_stab(type_, pokemon) { "(s)" } else { "" };
 

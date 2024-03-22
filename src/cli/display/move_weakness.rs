@@ -5,10 +5,12 @@ use crate::models::{Move, Pokemon, TypeChart};
 use std::fmt;
 
 use indoc::writedoc;
+use rusqlite::Connection;
 
 pub struct MoveWeaknessComponent<'a> {
     pub defender: &'a Pokemon,
     pub attacker: &'a Pokemon,
+    pub db: &'a Connection,
     pub verbose: bool,
     pub stab_only: bool,
 }
@@ -18,14 +20,18 @@ impl fmt::Display for DisplayComponent<MoveWeaknessComponent<'_>> {
         let MoveWeaknessComponent {
             defender,
             attacker,
+            db,
             verbose,
             stab_only,
         } = self.context;
 
-        let weakness_groups = self.group_by_weakness(attacker.move_list.get_map(), |move_| {
-            let multiplier = defender.defense_chart.get_multiplier(&move_.1.type_);
+        let attacker_moves = attacker.get_move_data(db).unwrap();
+        let defender_defense = defender.get_defense_chart(db).unwrap();
 
-            let stab_qualified = !stab_only || is_stab(&move_.1.type_, &attacker.data);
+        let weakness_groups = self.group_by_weakness(attacker_moves.get_list(), |move_| {
+            let multiplier = defender_defense.get_multiplier(&move_.1.type_);
+
+            let stab_qualified = !stab_only || is_stab(&move_.1.type_, attacker);
             let verbose_qualified = verbose || multiplier >= 2.0;
 
             if move_.1.damage_class != "status" && stab_qualified && verbose_qualified {
@@ -58,7 +64,7 @@ impl WeaknessDisplay<&Move> for DisplayComponent<MoveWeaknessComponent<'_>> {
                 "physical" => "p",
                 _ => "?",
             };
-            let color = if is_stab(&move_.type_, &self.context.attacker.data) {
+            let color = if is_stab(&move_.type_, self.context.attacker) {
                 stab_color
             } else {
                 normal_color

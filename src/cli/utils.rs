@@ -1,4 +1,4 @@
-use crate::models::PokemonData;
+use crate::models::Pokemon;
 use std::io::{stdout, IsTerminal};
 
 pub fn is_color_enabled() -> bool {
@@ -29,7 +29,7 @@ pub fn is_terminal() -> bool {
     stdout().is_terminal()
 }
 
-pub fn is_stab(type_: &str, pokemon: &PokemonData) -> bool {
+pub fn is_stab(type_: &str, pokemon: &Pokemon) -> bool {
     if let Some(secondary_type) = &pokemon.secondary_type {
         type_ == pokemon.primary_type || type_ == secondary_type
     } else {

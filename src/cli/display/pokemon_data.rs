@@ -1,13 +1,13 @@
 use super::{Colors, DisplayComponent};
-use crate::models::PokemonData;
+use crate::models::Pokemon;
 
 use std::fmt;
 
 use indoc::writedoc;
 
-impl fmt::Display for DisplayComponent<&PokemonData> {
+impl fmt::Display for DisplayComponent<&Pokemon> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let PokemonData {
+        let Pokemon {
             name,
             generation,
             primary_type,

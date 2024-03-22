@@ -1,5 +1,6 @@
 pub mod config;
 pub mod database;
+pub mod trainers;
 
 use std::fs;
 use std::path::{Path, PathBuf};
