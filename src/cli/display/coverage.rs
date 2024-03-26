@@ -1,5 +1,5 @@
 use super::{Colors, DisplayComponent};
-use crate::models::{Pokemon, Type, TypeChart, TypeCharts, TYPES};
+use crate::models::{FromDb, Pokemon, Type, TypeChart, TypeCharts, TYPES};
 
 use std::collections::{hash_map::Entry, HashMap};
 use std::fmt;
@@ -77,12 +77,12 @@ impl DisplayComponent<CoverageComponent<'_>> {
             let pokemon_name = &pokemon.name;
 
             let Type { offense_chart, .. } =
-                Type::from_name(&pokemon.primary_type, pokemon.generation, db).unwrap();
+                Type::from_db(&pokemon.primary_type, pokemon.generation, db).unwrap();
             self.add_pokemon_to_coverage(pokemon_name, &offense_chart, &mut offense_coverage);
 
             if let Some(secondary_type) = pokemon.secondary_type.as_ref() {
                 let Type { offense_chart, .. } =
-                    Type::from_name(secondary_type, pokemon.generation, db).unwrap();
+                    Type::from_db(secondary_type, pokemon.generation, db).unwrap();
                 self.add_pokemon_to_coverage(pokemon_name, &offense_chart, &mut offense_coverage);
             }
 

@@ -1,9 +1,9 @@
 pub mod resource;
 
 use resource::{
-    AbilityRow, CustomPokemonParams, EvolutionRow, FromRow, GameRow, MoveChangeRow, MoveRow,
-    PokemonAbilityRow, PokemonMoveRow, PokemonRow, PokemonTypeChangeRow, SelectChangeRow,
-    SelectRow, SpeciesRow, TypeChangeRow, TypeRow,
+    AbilityRow, CustomPokemon, EvolutionRow, FromRow, GameRow, MoveChangeRow, MoveRow,
+    PokemonAbilityRow, PokemonMoveRow, PokemonRow, PokemonTypeChangeRow, Resource, SelectAllNames,
+    SelectChangeRow, SelectRow, SpeciesRow, TypeChangeRow, TypeRow,
 };
 
 use std::collections::HashMap;
@@ -12,6 +12,17 @@ use std::ops::Add;
 use anyhow::{bail, Result};
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
+
+pub trait FromDb: Sized {
+    fn from_db(name: &str, generation: u8, db: &Connection) -> Result<Self>;
+}
+
+pub trait FromName<T: SelectAllNames>: FromDb {
+    fn from_name(name: &str, generation: u8, db: &Connection) -> Result<Self> {
+        let name = Resource::<T>::validate(db, name)?;
+        Self::from_db(&name, generation, db)
+    }
+}
 
 #[derive(Debug)]
 pub struct Pokemon {
@@ -28,15 +39,7 @@ pub struct Pokemon {
     pub species: String,
 }
 impl Pokemon {
-    pub fn from_name(pokemon_name: &str, generation: u8, db: &Connection) -> Result<Self> {
-        let pokemon_row = PokemonRow::select_by_name(pokemon_name, db)?;
-        Pokemon::from_row(pokemon_row, generation, db)
-    }
-
-    pub fn from_custom_params(
-        custom_pokemon: CustomPokemonParams,
-        db: &Connection,
-    ) -> Result<Self> {
+    pub fn from_custom(custom_pokemon: CustomPokemon, db: &Connection) -> Result<Self> {
         let pokemon_row = PokemonRow::select_by_name(&custom_pokemon.base_pokemon, db)?;
         let db_pokemon = Pokemon::from_row(pokemon_row, custom_pokemon.generation, db)?;
 
@@ -70,10 +73,10 @@ impl Pokemon {
     }
 
     pub fn get_defense_chart(&self, db: &Connection) -> Result<DefenseTypeChart> {
-        let primary_type = Type::from_name(&self.primary_type, self.generation, db)?;
+        let primary_type = Type::from_db(&self.primary_type, self.generation, db)?;
 
         if let Some(secondary_type) = &self.secondary_type {
-            let secondary_type = Type::from_name(secondary_type, self.generation, db)?;
+            let secondary_type = Type::from_db(secondary_type, self.generation, db)?;
 
             Ok(primary_type.defense_chart + secondary_type.defense_chart)
         } else {
@@ -87,6 +90,13 @@ impl Pokemon {
         Ok(serde_json::from_str(&evolution_row.evolution)?)
     }
 }
+impl FromDb for Pokemon {
+    fn from_db(pokemon_name: &str, generation: u8, db: &Connection) -> Result<Self> {
+        let pokemon_row = PokemonRow::select_by_name(pokemon_name, db)?;
+        Pokemon::from_row(pokemon_row, generation, db)
+    }
+}
+impl FromName<PokemonRow> for Pokemon {}
 impl FromRow<PokemonRow> for Pokemon {
     fn from_row(value: PokemonRow, current_gen: u8, db: &Connection) -> Result<Self> {
         let PokemonRow {
@@ -201,11 +211,6 @@ pub struct Type {
     pub generation: u8,
 }
 impl Type {
-    pub fn from_name(type_name: &str, generation: u8, db: &Connection) -> Result<Self> {
-        let type_row = TypeRow::select_by_name(type_name, db)?;
-        Type::from_row(type_row, generation, db)
-    }
-
     fn relation_to_hashmap(
         no_damage: &str,
         half_damage: &str,
@@ -232,6 +237,13 @@ impl Type {
             });
     }
 }
+impl FromDb for Type {
+    fn from_db(type_name: &str, generation: u8, db: &Connection) -> Result<Self> {
+        let type_row = TypeRow::select_by_name(type_name, db)?;
+        Type::from_row(type_row, generation, db)
+    }
+}
+impl FromName<TypeRow> for Type {}
 impl FromRow<TypeRow> for Type {
     fn from_row(value: TypeRow, current_gen: u8, db: &Connection) -> Result<Self> {
         let TypeRow {
@@ -430,12 +442,13 @@ pub struct Move {
     pub effect_chance: Option<i64>,
     pub generation: u8,
 }
-impl Move {
-    pub fn from_name(move_name: &str, generation: u8, db: &Connection) -> Result<Self> {
+impl FromDb for Move {
+    fn from_db(move_name: &str, generation: u8, db: &Connection) -> Result<Self> {
         let move_row = MoveRow::select_by_name(move_name, db)?;
         Move::from_row(move_row, generation, db)
     }
 }
+impl FromName<MoveRow> for Move {}
 impl FromRow<MoveRow> for Move {
     fn from_row(value: MoveRow, current_gen: u8, db: &Connection) -> Result<Self> {
         let MoveRow {
@@ -488,7 +501,7 @@ impl MoveList {
     pub fn try_new(move_list: &[&str], generation: u8, db: &Connection) -> Result<Self> {
         let mut move_data = HashMap::new();
         for move_ in move_list {
-            let move_ = Move::from_name(move_, generation, db)?;
+            let move_ = Move::from_db(move_, generation, db)?;
             move_data.insert(move_.name.clone(), move_);
         }
         Ok(Self(move_data))
@@ -509,12 +522,13 @@ pub struct Ability {
     pub effect: String,
     pub generation: u8,
 }
-impl Ability {
-    pub fn from_name(ability_name: &str, generation: u8, db: &Connection) -> Result<Self> {
+impl FromDb for Ability {
+    fn from_db(ability_name: &str, generation: u8, db: &Connection) -> Result<Self> {
         let ability_row = AbilityRow::select_by_name(ability_name, db)?;
         Ability::from_row(ability_row, generation, db)
     }
 }
+impl FromName<AbilityRow> for Ability {}
 impl FromRow<AbilityRow> for Ability {
     fn from_row(value: AbilityRow, current_gen: u8, _db: &Connection) -> Result<Self> {
         let AbilityRow {
@@ -697,15 +711,6 @@ pub struct Game {
     pub order: u8,
     pub generation: u8,
 }
-impl Game {
-    pub fn new(name: String, order: u8, generation: u8) -> Self {
-        Self {
-            name,
-            order,
-            generation,
-        }
-    }
-}
 impl From<GameRow> for Game {
     fn from(row: GameRow) -> Self {
         let GameRow {
@@ -714,7 +719,12 @@ impl From<GameRow> for Game {
             generation,
             ..
         } = row;
-        Game::new(name, order, generation)
+
+        Self {
+            name,
+            order,
+            generation,
+        }
     }
 }
 
@@ -733,15 +743,15 @@ mod tests {
         let db = db();
 
         // Ogerpon was not inroduced until gen 9
-        Pokemon::from_name("ogerpon", 8, &db).unwrap_err();
-        Pokemon::from_name("ogerpon", 9, &db).unwrap();
+        Pokemon::from_db("ogerpon", 8, &db).unwrap_err();
+        Pokemon::from_db("ogerpon", 9, &db).unwrap();
 
         // Wailord is not present in gen 9, but is present in gen 8
-        Pokemon::from_name("wailord", 9, &db).unwrap_err();
-        Pokemon::from_name("wailord", 8, &db).unwrap();
+        Pokemon::from_db("wailord", 9, &db).unwrap_err();
+        Pokemon::from_db("wailord", 8, &db).unwrap();
 
         // Test dual type defense chart
-        let golem = Pokemon::from_name("golem", 9, &db).unwrap();
+        let golem = Pokemon::from_db("golem", 9, &db).unwrap();
         let golem_defense = golem.get_defense_chart(&db).unwrap();
         assert_eq!(4.0, golem_defense.get_multiplier("water"));
         assert_eq!(2.0, golem_defense.get_multiplier("fighting"));
@@ -751,9 +761,9 @@ mod tests {
         assert_eq!(0.0, golem_defense.get_multiplier("electric"));
 
         // Clefairy was Normal type until gen 6
-        let clefairy_gen_5 = Pokemon::from_name("clefairy", 5, &db).unwrap();
+        let clefairy_gen_5 = Pokemon::from_db("clefairy", 5, &db).unwrap();
         assert_eq!("normal", clefairy_gen_5.primary_type);
-        let clefairy_gen_6 = Pokemon::from_name("clefairy", 6, &db).unwrap();
+        let clefairy_gen_6 = Pokemon::from_db("clefairy", 6, &db).unwrap();
         assert_eq!("fairy", clefairy_gen_6.primary_type);
     }
 
@@ -761,19 +771,19 @@ mod tests {
     fn get_pokemon_evolution() {
         let db = db();
 
-        let cascoon = Pokemon::from_name("cascoon", 3, &db)
+        let cascoon = Pokemon::from_db("cascoon", 3, &db)
             .unwrap()
             .get_evolution_steps(&db)
             .unwrap();
         insta::assert_yaml_snapshot!(cascoon);
 
-        let applin = Pokemon::from_name("applin", 9, &db)
+        let applin = Pokemon::from_db("applin", 9, &db)
             .unwrap()
             .get_evolution_steps(&db)
             .unwrap();
         insta::assert_yaml_snapshot!(applin);
 
-        let politoed = Pokemon::from_name("politoed", 9, &db)
+        let politoed = Pokemon::from_db("politoed", 9, &db)
             .unwrap()
             .get_evolution_steps(&db)
             .unwrap();
@@ -785,16 +795,16 @@ mod tests {
         let db = db();
 
         // Fairy was not introduced until gen 6
-        Type::from_name("fairy", 5, &db).unwrap_err();
-        Type::from_name("fairy", 6, &db).unwrap();
+        Type::from_db("fairy", 5, &db).unwrap_err();
+        Type::from_db("fairy", 6, &db).unwrap();
 
         // Bug gen 1 2x against poison
-        let bug_gen_1 = Type::from_name("bug", 1, &db).unwrap();
+        let bug_gen_1 = Type::from_db("bug", 1, &db).unwrap();
         assert_eq!(2.0, bug_gen_1.offense_chart.get_multiplier("poison"));
         assert_eq!(1.0, bug_gen_1.offense_chart.get_multiplier("dark"));
 
         // Bug gen >=2 2x against dark
-        let bug_gen_2 = Type::from_name("bug", 2, &db).unwrap();
+        let bug_gen_2 = Type::from_db("bug", 2, &db).unwrap();
         assert_eq!(0.5, bug_gen_2.offense_chart.get_multiplier("poison"));
         assert_eq!(2.0, bug_gen_2.offense_chart.get_multiplier("dark"));
     }
@@ -804,21 +814,21 @@ mod tests {
         let db = db();
 
         // Earth Power was not introduced until gen 4
-        Move::from_name("earth-power", 3, &db).unwrap_err();
-        Move::from_name("earth-power", 4, &db).unwrap();
+        Move::from_db("earth-power", 3, &db).unwrap_err();
+        Move::from_db("earth-power", 4, &db).unwrap();
 
         // Tackle gen 1-4 power: 35 accuracy: 95
-        let tackle_gen_4 = Move::from_name("tackle", 4, &db).unwrap();
+        let tackle_gen_4 = Move::from_db("tackle", 4, &db).unwrap();
         assert_eq!(35, tackle_gen_4.power.unwrap());
         assert_eq!(95, tackle_gen_4.accuracy.unwrap());
 
         // Tackle gen 5-6 power: 50 accuracy: 100
-        let tackle_gen_5 = Move::from_name("tackle", 5, &db).unwrap();
+        let tackle_gen_5 = Move::from_db("tackle", 5, &db).unwrap();
         assert_eq!(50, tackle_gen_5.power.unwrap());
         assert_eq!(100, tackle_gen_5.accuracy.unwrap());
 
         // Tackle gen >=7 power: 40 accuracy: 100
-        let tackle_gen_7 = Move::from_name("tackle", 7, &db).unwrap();
+        let tackle_gen_7 = Move::from_db("tackle", 7, &db).unwrap();
         assert_eq!(40, tackle_gen_7.power.unwrap());
         assert_eq!(100, tackle_gen_7.accuracy.unwrap());
     }
@@ -828,8 +838,8 @@ mod tests {
         let db = db();
 
         // Beads of Ruin was not introduced until gen 9
-        Ability::from_name("beads-of-ruin", 8, &db).unwrap_err();
-        Ability::from_name("beads-of-ruin", 9, &db).unwrap();
+        Ability::from_db("beads-of-ruin", 8, &db).unwrap_err();
+        Ability::from_db("beads-of-ruin", 9, &db).unwrap();
     }
 
     #[test]

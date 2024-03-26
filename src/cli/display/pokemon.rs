@@ -9,6 +9,7 @@ impl fmt::Display for DisplayComponent<&Pokemon> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let Pokemon {
             name,
+            nickname,
             generation,
             primary_type,
             secondary_type,
@@ -17,6 +18,18 @@ impl fmt::Display for DisplayComponent<&Pokemon> {
             abilities,
             ..
         } = self.context;
+
+        let name_header = if nickname != name {
+            format!(
+                "{header}{nickname}{header:#} ({name})",
+                header = self.ansi_bold(Colors::Header)
+            )
+        } else {
+            format!(
+                "{header}{name}{header:#}",
+                header = self.ansi_bold(Colors::Header)
+            )
+        };
 
         let secondary_type = match secondary_type {
             Some(type_) => format!(" {type_} "),
@@ -38,11 +51,10 @@ impl fmt::Display for DisplayComponent<&Pokemon> {
 
         writedoc! {
             f,
-            "{header}{name}{header:#} {primary_type}{secondary_type}{yellow}{group}{yellow:#}
+            "{name_header} {primary_type}{secondary_type}{yellow}{group}{yellow:#}
             {abilities}
             {stats_display}
             gen-{generation}",
-            header = self.ansi_bold(Colors::Header),
             yellow = self.ansi(Colors::Yellow),
         }
     }

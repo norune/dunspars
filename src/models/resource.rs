@@ -58,71 +58,13 @@ pub trait SelectAllNames: TableRow {
 
         Ok(names)
     }
+
+    fn label() -> &'static str;
 }
 
 pub enum ResourceResult {
     Valid,
     Invalid(Vec<String>),
-}
-
-pub trait Resource: SelectAllNames {
-    fn get_matches(value: &str, db: &Connection) -> Vec<String> {
-        Self::resource(db)
-            .iter()
-            .filter_map(|r| {
-                let close_enough = if !r.is_empty() && !value.is_empty() {
-                    let first_r = r.chars().next().unwrap();
-                    let first_value = value.chars().next().unwrap();
-
-                    // Only perform spellcheck on first character match; potentially expensive
-                    first_r == first_value && strsim::levenshtein(r, value) < 4
-                } else {
-                    false
-                };
-
-                if r.contains(value) || close_enough {
-                    Some(r.clone())
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<String>>()
-    }
-
-    fn check(value: &str, db: &Connection) -> ResourceResult {
-        let matches = Self::get_matches(value, db);
-        if matches.iter().any(|m| *m == value) {
-            ResourceResult::Valid
-        } else {
-            ResourceResult::Invalid(matches)
-        }
-    }
-
-    fn validate(value: &str, db: &Connection) -> Result<String> {
-        let value = value.to_lowercase();
-        match Self::check(&value, db) {
-            ResourceResult::Valid => Ok(value),
-            ResourceResult::Invalid(matches) => bail!(Self::invalid_message(&value, &matches)),
-        }
-    }
-
-    fn invalid_message(value: &str, matches: &[String]) -> String {
-        let resource_name = Self::label();
-        let mut message = format!("{resource_name} '{value}' not found.");
-
-        if matches.len() > 20 {
-            message += " Potential matches found; too many to display.";
-        } else if !matches.is_empty() {
-            message += &format!(" Potential matches: {}.", matches.join(" "));
-        }
-
-        message
-    }
-
-    fn resource(db: &Connection) -> Vec<String> {
-        Self::select_all_names(db).unwrap()
-    }
-    fn label() -> &'static str;
 }
 
 pub struct GameRow {
@@ -152,8 +94,7 @@ impl InsertRow for GameRow {
         statement.execute(params![self.id, self.name, self.order, self.generation])
     }
 }
-impl SelectAllNames for GameRow {}
-impl Resource for GameRow {
+impl SelectAllNames for GameRow {
     fn label() -> &'static str {
         "Game"
     }
@@ -209,8 +150,7 @@ impl InsertRow for MoveRow {
         ])
     }
 }
-impl SelectAllNames for MoveRow {}
-impl Resource for MoveRow {
+impl SelectAllNames for MoveRow {
     fn label() -> &'static str {
         "Move"
     }
@@ -328,8 +268,7 @@ impl InsertRow for TypeRow {
         ])
     }
 }
-impl SelectAllNames for TypeRow {}
-impl Resource for TypeRow {
+impl SelectAllNames for TypeRow {
     fn label() -> &'static str {
         "Type"
     }
@@ -427,8 +366,7 @@ impl InsertRow for AbilityRow {
         statement.execute(params![self.id, self.name, self.effect, self.generation])
     }
 }
-impl SelectAllNames for AbilityRow {}
-impl Resource for AbilityRow {
+impl SelectAllNames for AbilityRow {
     fn label() -> &'static str {
         "Ability"
     }
@@ -550,8 +488,7 @@ impl SelectRow for PokemonRow {
         })
     }
 }
-impl SelectAllNames for PokemonRow {}
-impl Resource for PokemonRow {
+impl SelectAllNames for PokemonRow {
     fn label() -> &'static str {
         "Pokémon"
     }
@@ -726,11 +663,80 @@ impl SelectRow for MetaRow {
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
-pub struct CustomPokemonParams {
+pub struct CustomPokemon {
     pub nickname: String,
     pub base_pokemon: String,
     pub primary_type: Option<String>,
     pub secondary_type: Option<String>,
     pub moves: Vec<String>,
     pub generation: u8,
+    pub tags: Vec<String>,
+}
+
+pub trait Resource<T> {
+    fn validate(&self, value: &str) -> Result<String> {
+        let value = value.to_lowercase();
+        match self.check(&value) {
+            ResourceResult::Valid => Ok(value),
+            ResourceResult::Invalid(matches) => bail!(Self::invalid_message(&value, &matches)),
+        }
+    }
+
+    fn check(&self, value: &str) -> ResourceResult {
+        let matches = self.get_matches(value);
+        if matches.iter().any(|m| *m == value) {
+            ResourceResult::Valid
+        } else {
+            ResourceResult::Invalid(matches)
+        }
+    }
+
+    fn get_matches(&self, value: &str) -> Vec<String> {
+        self.resource()
+            .iter()
+            .filter_map(|r| {
+                let close_enough = if !r.is_empty() && !value.is_empty() {
+                    let first_r = r.chars().next().unwrap();
+                    let first_value = value.chars().next().unwrap();
+
+                    // Only perform spellcheck on first character match; potentially expensive
+                    first_r == first_value && strsim::levenshtein(r, value) < 4
+                } else {
+                    false
+                };
+
+                if r.contains(value) || close_enough {
+                    Some(r.clone())
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<String>>()
+    }
+
+    fn invalid_message(value: &str, matches: &[String]) -> String {
+        let resource_name = Self::label();
+        let mut message = format!("{resource_name} '{value}' not found.");
+
+        if matches.len() > 20 {
+            message += " Potential matches found; too many to display.";
+        } else if !matches.is_empty() {
+            message += &format!(" Potential matches: {}.", matches.join(" "));
+        }
+
+        message
+    }
+
+    fn resource(&self) -> Vec<String>;
+    fn label() -> &'static str;
+}
+
+impl<T: SelectAllNames> Resource<T> for Connection {
+    fn resource(&self) -> Vec<String> {
+        T::select_all_names(self).unwrap()
+    }
+
+    fn label() -> &'static str {
+        T::label()
+    }
 }

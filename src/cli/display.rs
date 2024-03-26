@@ -5,7 +5,7 @@ mod match_;
 mod move_;
 mod move_list;
 mod move_weakness;
-mod pokemon_data;
+mod pokemon;
 mod stats;
 mod typechart;
 mod weakness;

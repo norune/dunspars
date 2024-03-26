@@ -1,8 +1,10 @@
 use super::display::*;
 use super::ResourceArgs;
 use crate::api::game_to_gen;
-use crate::models::resource::{AbilityRow, GameRow, MoveRow, PokemonRow, Resource, TypeRow};
-use crate::models::{Ability, Move, Pokemon, Type};
+use crate::models::resource::{
+    AbilityRow, GameRow, MoveRow, PokemonRow, Resource, SelectAllNames, TypeRow,
+};
+use crate::models::{Ability, FromName, Move, Pokemon, Type};
 use crate::resource::config::{Config, ConfigFile};
 use crate::resource::database::DatabaseFile;
 
@@ -26,7 +28,7 @@ impl DbContext {
 
     fn get_generation(&self) -> Result<u8> {
         let game = match &self.config.game {
-            Some(game) => self.validate::<GameRow>(game)?,
+            Some(game) => Resource::<GameRow>::validate(&self.db, game)?,
             None => self
                 .get_latest_game()
                 .ok_or(anyhow!("Cannot find the latest game"))?,
@@ -34,12 +36,11 @@ impl DbContext {
         Ok(game_to_gen(&game, &self.db))
     }
 
-    fn validate<T: Resource>(&self, name: &str) -> Result<String> {
-        T::validate(name, &self.db)
-    }
-
     fn get_latest_game(&self) -> Option<String> {
-        GameRow::resource(&self.db).last().map(|g| g.to_string())
+        GameRow::select_all_names(&self.db)
+            .unwrap()
+            .last()
+            .map(|g| g.to_string())
     }
 }
 
@@ -66,8 +67,7 @@ impl Command for PokemonCommand {
         let ctx = DbContext::try_new(config)?;
         let generation = ctx.get_generation()?;
 
-        let pokemon_name = ctx.validate::<PokemonRow>(&self.name)?;
-        let pokemon = Pokemon::from_name(&pokemon_name, generation, &ctx.db)?;
+        let pokemon = Pokemon::from_name(&self.name, generation, &ctx.db)?;
         let pokemon_display = DisplayComponent::new(&pokemon, ctx.config.color_enabled);
 
         let defense_chart = pokemon.get_defense_chart(&ctx.db)?;
@@ -124,19 +124,12 @@ pub struct TypeCommand {
     pub primary_type: String,
     pub secondary_type: Option<String>,
 }
-impl TypeCommand {
-    fn get_type(type_name: &str, generation: u8, ctx: &DbContext) -> Result<Type> {
-        let type_name = ctx.validate::<TypeRow>(type_name)?;
-        let type_ = Type::from_name(&type_name, generation, &ctx.db)?;
-        Ok(type_)
-    }
-}
 impl Command for TypeCommand {
     async fn run(&self, config: Config, writer: &mut impl Write) -> Result<i32> {
         let ctx = DbContext::try_new(config)?;
         let generation = ctx.get_generation()?;
 
-        let primary_type = Self::get_type(&self.primary_type, generation, &ctx)?;
+        let primary_type = Type::from_name(&self.primary_type, generation, &ctx.db)?;
         let primary_offense_ctx = TypeChartComponent {
             type_chart: &primary_type.offense_chart,
         };
@@ -146,7 +139,7 @@ impl Command for TypeCommand {
         let secondary_type = self
             .secondary_type
             .as_ref()
-            .map(|t| Self::get_type(t, generation, &ctx));
+            .map(|t| Type::from_name(t, generation, &ctx.db));
 
         match secondary_type {
             Some(secondary_type) => {
@@ -203,8 +196,7 @@ impl Command for MoveCommand {
         let ctx = DbContext::try_new(config)?;
         let generation = ctx.get_generation()?;
 
-        let move_name = ctx.validate::<MoveRow>(&self.name)?;
-        let move_ = Move::from_name(&move_name, generation, &ctx.db)?;
+        let move_ = Move::from_name(&self.name, generation, &ctx.db)?;
         let move_display = DisplayComponent::new(&move_, ctx.config.color_enabled);
 
         writedoc! {
@@ -226,8 +218,7 @@ impl Command for AbilityCommand {
         let ctx = DbContext::try_new(config)?;
         let generation = ctx.get_generation()?;
 
-        let ability_name = ctx.validate::<AbilityRow>(&self.name)?;
-        let ability = Ability::from_name(&ability_name, generation, &ctx.db)?;
+        let ability = Ability::from_name(&self.name, generation, &ctx.db)?;
         let ability_display = DisplayComponent::new(&ability, ctx.config.color_enabled);
 
         writedoc! {
@@ -253,14 +244,12 @@ impl Command for MatchCommand {
         let ctx = DbContext::try_new(config)?;
         let generation = ctx.get_generation()?;
 
-        let attacker_name = ctx.validate::<PokemonRow>(&self.attacker_name)?;
-        let attacker = Pokemon::from_name(&attacker_name, generation, &ctx.db)?;
+        let attacker = Pokemon::from_name(&self.attacker_name, generation, &ctx.db)?;
 
         let mut defenders = vec![];
 
         for defender_name in self.defender_names.iter() {
-            let defender_name = ctx.validate::<PokemonRow>(defender_name)?;
-            let defender = Pokemon::from_name(&defender_name, generation, &ctx.db)?;
+            let defender = Pokemon::from_name(defender_name, generation, &ctx.db)?;
 
             defenders.push(defender);
         }
@@ -299,8 +288,7 @@ impl Command for CoverageCommand {
 
         let mut pokemon = vec![];
         for name in self.names.iter() {
-            let name = ctx.validate::<PokemonRow>(name)?;
-            let mon = Pokemon::from_name(&name, generation, &ctx.db)?;
+            let mon = Pokemon::from_name(name, generation, &ctx.db)?;
             pokemon.push(mon);
         }
 
@@ -331,11 +319,11 @@ impl Command for ResourceCommand {
         let delimiter = self.delimiter.clone().unwrap_or("\n".to_string());
 
         let resource = match self.resource {
-            ResourceArgs::Pokemon => PokemonRow::resource(&ctx.db).join(&delimiter),
-            ResourceArgs::Moves => MoveRow::resource(&ctx.db).join(&delimiter),
-            ResourceArgs::Abilities => AbilityRow::resource(&ctx.db).join(&delimiter),
-            ResourceArgs::Types => TypeRow::resource(&ctx.db).join(&delimiter),
-            ResourceArgs::Games => GameRow::resource(&ctx.db).join(&delimiter),
+            ResourceArgs::Pokemon => PokemonRow::select_all_names(&ctx.db)?.join(&delimiter),
+            ResourceArgs::Moves => MoveRow::select_all_names(&ctx.db)?.join(&delimiter),
+            ResourceArgs::Abilities => AbilityRow::select_all_names(&ctx.db)?.join(&delimiter),
+            ResourceArgs::Types => TypeRow::select_all_names(&ctx.db)?.join(&delimiter),
+            ResourceArgs::Games => GameRow::select_all_names(&ctx.db)?.join(&delimiter),
         };
 
         writedoc! {

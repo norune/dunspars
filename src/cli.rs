@@ -133,8 +133,11 @@ pub async fn run() -> Result<i32> {
 async fn run_command(commands: Commands, config: Config) -> Result<i32> {
     let mut output = stdout().lock();
 
-    // Performing dynamic dispatch here, i.e. dyn Command.run(), doesn't work for some unknown reason.
-    // Rust produces error messages that obscure the actual reason: https://github.com/rust-lang/rust/issues/119502
+    // Performing dynamic dispatch here, i.e. dyn Command.run(), doesn't work.
+    // Related issues:
+    // https://github.com/rust-lang/rust/issues/119502
+    // https://github.com/rust-lang/rust/issues/78649
+    // https://github.com/rust-lang/rust/issues/119727
     match commands {
         Commands::Setup => {
             let cmd = SetupCommand;
