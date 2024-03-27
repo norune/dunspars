@@ -1,9 +1,10 @@
 pub mod resource;
 
+use crate::resource::custom::{CustomCollection, CustomPokemon};
 use resource::{
-    AbilityRow, CustomPokemon, EvolutionRow, FromRow, GameRow, MoveChangeRow, MoveRow,
-    PokemonAbilityRow, PokemonMoveRow, PokemonRow, PokemonTypeChangeRow, Resource, SelectAllNames,
-    SelectChangeRow, SelectRow, SpeciesRow, TypeChangeRow, TypeRow,
+    AbilityRow, EvolutionRow, FromRow, GameRow, MoveChangeRow, MoveRow, PokemonAbilityRow,
+    PokemonMoveRow, PokemonRow, PokemonTypeChangeRow, Resource, SelectAllNames, SelectChangeRow,
+    SelectRow, SpeciesRow, TypeChangeRow, TypeRow,
 };
 
 use std::collections::HashMap;
@@ -39,22 +40,25 @@ pub struct Pokemon {
     pub species: String,
 }
 impl Pokemon {
-    pub fn from_custom(custom_pokemon: CustomPokemon, db: &Connection) -> Result<Self> {
-        let pokemon_row = PokemonRow::select_by_name(&custom_pokemon.base_pokemon, db)?;
-        let db_pokemon = Pokemon::from_row(pokemon_row, custom_pokemon.generation, db)?;
+    pub fn from_custom(custom: &CustomPokemon, db: &Connection) -> Result<Self> {
+        let pokemon_row = PokemonRow::select_by_name(&custom.base, db)?;
+        let db_pokemon = Pokemon::from_row(pokemon_row, custom.generation, db)?;
 
-        let primary_type = custom_pokemon
-            .primary_type
-            .unwrap_or(db_pokemon.primary_type);
-        let secondary_type = custom_pokemon.secondary_type.or(db_pokemon.secondary_type);
+        let mut primary_type = db_pokemon.primary_type;
+        let mut secondary_type = db_pokemon.secondary_type;
+
+        if let Some((primary, secondary)) = &custom.types {
+            primary_type = primary.clone();
+            secondary_type = secondary.clone();
+        }
 
         Ok(Pokemon {
             name: db_pokemon.name,
-            nickname: custom_pokemon.nickname,
+            nickname: custom.nickname.clone(),
             primary_type,
             secondary_type,
             learnable_moves: db_pokemon.learnable_moves,
-            moves: custom_pokemon.moves,
+            moves: custom.moves.clone(),
             group: db_pokemon.group,
             generation: db_pokemon.generation,
             stats: db_pokemon.stats,
@@ -63,12 +67,16 @@ impl Pokemon {
         })
     }
 
-    pub fn get_move_data(&self, db: &Connection) -> Result<MoveList> {
+    pub fn get_move_list(&self, db: &Connection) -> Result<MoveList> {
+        MoveList::try_new(&self.moves, self.generation, db)
+    }
+
+    pub fn get_learnable_move_list(&self, db: &Connection) -> Result<MoveList> {
         let move_list = self
             .learnable_moves
             .iter()
-            .map(|m| m.0.as_str())
-            .collect::<Vec<&str>>();
+            .map(|m| m.0.clone())
+            .collect::<Vec<String>>();
         MoveList::try_new(&move_list, self.generation, db)
     }
 
@@ -96,7 +104,17 @@ impl FromDb for Pokemon {
         Pokemon::from_row(pokemon_row, generation, db)
     }
 }
-impl FromName<PokemonRow> for Pokemon {}
+impl FromName<PokemonRow> for Pokemon {
+    fn from_name(name: &str, generation: u8, db: &Connection) -> Result<Self> {
+        let custom = CustomCollection::from_file()?;
+        if let Some(custom_pokemon) = custom.find_pokemon(name) {
+            Self::from_custom(custom_pokemon, db)
+        } else {
+            let name = Resource::<PokemonRow>::validate(db, name)?;
+            Self::from_db(&name, generation, db)
+        }
+    }
+}
 impl FromRow<PokemonRow> for Pokemon {
     fn from_row(value: PokemonRow, current_gen: u8, db: &Connection) -> Result<Self> {
         let PokemonRow {
@@ -498,7 +516,7 @@ impl FromRow<MoveRow> for Move {
 
 pub struct MoveList(HashMap<String, Move>);
 impl MoveList {
-    pub fn try_new(move_list: &[&str], generation: u8, db: &Connection) -> Result<Self> {
+    pub fn try_new(move_list: &[String], generation: u8, db: &Connection) -> Result<Self> {
         let mut move_data = HashMap::new();
         for move_ in move_list {
             let move_ = Move::from_db(move_, generation, db)?;
@@ -513,6 +531,10 @@ impl MoveList {
 
     pub fn get_list(&self) -> &HashMap<String, Move> {
         &self.0
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
     }
 }
 

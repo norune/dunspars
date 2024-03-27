@@ -1,11 +1,10 @@
 use super::{app_config_directory, AppFile, YamlFile};
-use crate::models::resource::{CustomPokemon, Resource};
 
 use anyhow::Result;
 
 use std::path::PathBuf;
 
-#[derive(Default, serde::Serialize, serde::Deserialize)]
+#[derive(Default, Debug, serde::Serialize, serde::Deserialize)]
 pub struct CustomCollection {
     pokemon: Vec<CustomPokemon>,
 }
@@ -18,6 +17,12 @@ impl CustomCollection {
             Ok(Self::default())
         }
     }
+
+    pub fn find_pokemon(&self, nickname: &str) -> Option<&CustomPokemon> {
+        self.pokemon
+            .iter()
+            .find(|p| p.nickname.to_lowercase() == nickname.to_lowercase())
+    }
 }
 impl AppFile for CustomCollection {
     fn path() -> PathBuf {
@@ -27,12 +32,12 @@ impl AppFile for CustomCollection {
 impl YamlFile for CustomCollection {
     type YamlData = Self;
 }
-impl Resource<CustomPokemon> for CustomCollection {
-    fn resource(&self) -> Vec<String> {
-        self.pokemon.iter().map(|p| p.nickname.clone()).collect()
-    }
 
-    fn label() -> &'static str {
-        "Custom Pokémon"
-    }
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+pub struct CustomPokemon {
+    pub nickname: String,
+    pub base: String,
+    pub generation: u8,
+    pub moves: Vec<String>,
+    pub types: Option<(String, Option<String>)>,
 }

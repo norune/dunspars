@@ -662,17 +662,6 @@ impl SelectRow for MetaRow {
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
-pub struct CustomPokemon {
-    pub nickname: String,
-    pub base_pokemon: String,
-    pub primary_type: Option<String>,
-    pub secondary_type: Option<String>,
-    pub moves: Vec<String>,
-    pub generation: u8,
-    pub tags: Vec<String>,
-}
-
 pub trait Resource<T> {
     fn validate(&self, value: &str) -> Result<String> {
         let value = value.to_lowercase();

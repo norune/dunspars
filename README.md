@@ -9,7 +9,7 @@ dunspars setup
 ```
 This action requires an internet connection. Once it is finished, the program should be available for use offline.
 
-### Pokemon
+### Pokémon
 View a Pokémon's basic information. 
 ```
 dunspars pokemon pikachu --evolution --moves
@@ -53,6 +53,11 @@ View the effects of a Pokémon ability.
 ```
 dunspars ability intimidate
 ```
+
+### Custom Pokémon
+You can add custom Pokémon via a `custom.yaml` file in `~/.config/dunspars/`. 
+They can be referred by their nicknames and are integrated in the Coverage and Match subcommands.
+A template can be found in this project's `templates` folder.
 
 ### Help
 ```

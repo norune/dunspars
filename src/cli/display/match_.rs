@@ -27,7 +27,8 @@ impl fmt::Display for DisplayComponent<MatchComponent<'_>> {
         let defender_stats = DisplayComponent::new(&defender.stats, self.color_enabled);
         let attacker_stats = DisplayComponent::new(&attacker.stats, self.color_enabled);
 
-        let defender_moves_header = format!("{}'s moves vs {}", attacker.name, defender.name);
+        let defender_moves_header =
+            format!("{}'s moves vs {}", attacker.nickname, defender.nickname);
         let defender_context = MoveWeaknessComponent {
             defender,
             attacker,
@@ -37,7 +38,8 @@ impl fmt::Display for DisplayComponent<MatchComponent<'_>> {
         };
         let defender_weaknesses = DisplayComponent::new(defender_context, self.color_enabled);
 
-        let attacker_moves_header = format!("{}'s moves vs {}", defender.name, attacker.name);
+        let attacker_moves_header =
+            format!("{}'s moves vs {}", defender.nickname, attacker.nickname);
         let attacker_context = MoveWeaknessComponent {
             defender: attacker,
             attacker: defender,
@@ -57,10 +59,10 @@ impl fmt::Display for DisplayComponent<MatchComponent<'_>> {
             {header}{defender_moves_header}{header:#}{defender_weaknesses}
 
             {header}{attacker_moves_header}{header:#}{attacker_weaknesses}",
-            defender_header = &defender.name,
+            defender_header = &defender.nickname,
             defender_primary_type = defender.primary_type,
             defender_secondary_type = defender.secondary_type.as_deref().unwrap_or(""),
-            attacker_header = &attacker.name,
+            attacker_header = &attacker.nickname,
             attacker_primary_type = attacker.primary_type,
             attacker_secondary_type = attacker.secondary_type.as_deref().unwrap_or(""),
             header = self.ansi_bold(Colors::Header),

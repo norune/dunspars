@@ -73,31 +73,52 @@ impl DisplayComponent<CoverageComponent<'_>> {
         }
 
         for pokemon in pokemon {
-            let defense_chart = pokemon.get_defense_chart(db).unwrap();
-            let pokemon_name = &pokemon.name;
+            let move_list = pokemon.get_move_list(db).unwrap();
 
-            let Type { offense_chart, .. } =
-                Type::from_db(&pokemon.primary_type, pokemon.generation, db).unwrap();
-            self.add_pokemon_to_coverage(pokemon_name, &offense_chart, &mut offense_coverage);
+            // If the pokemon's move list is empty (i.e. non-custom), use its types as its offensive coverage
+            if move_list.is_empty() {
+                let primary_type =
+                    Type::from_db(&pokemon.primary_type, pokemon.generation, db).unwrap();
+                self.add_type_coverage(
+                    &pokemon.nickname,
+                    &primary_type.offense_chart,
+                    &mut offense_coverage,
+                );
 
-            if let Some(secondary_type) = pokemon.secondary_type.as_ref() {
-                let Type { offense_chart, .. } =
-                    Type::from_db(secondary_type, pokemon.generation, db).unwrap();
-                self.add_pokemon_to_coverage(pokemon_name, &offense_chart, &mut offense_coverage);
+                if let Some(secondary_type) = pokemon.secondary_type.as_ref() {
+                    let secondary_type =
+                        Type::from_db(secondary_type, pokemon.generation, db).unwrap();
+                    self.add_type_coverage(
+                        &pokemon.nickname,
+                        &secondary_type.offense_chart,
+                        &mut offense_coverage,
+                    );
+                }
+            } else {
+                // TODO
             }
 
-            self.add_pokemon_to_coverage(pokemon_name, &defense_chart, &mut defense_coverage);
+            let defense_chart = pokemon.get_defense_chart(db).unwrap();
+            self.add_type_coverage(&pokemon.nickname, &defense_chart, &mut defense_coverage);
         }
 
         (offense_coverage, defense_coverage)
     }
 
-    fn add_pokemon_to_coverage(
+    fn add_type_coverage(
         &self,
         pokemon_name: &str,
         type_chart: &impl TypeChart,
         coverage: &mut HashMap<String, Vec<String>>,
     ) {
+        let covered_types = self.get_covered_types(type_chart);
+        for (type_, tag) in covered_types {
+            self.add_to_coverage(pokemon_name, &tag, &type_, coverage);
+        }
+    }
+
+    fn get_covered_types(&self, type_chart: &impl TypeChart) -> Vec<(String, String)> {
+        let mut covered_types = vec![];
         for (type_, multiplier) in type_chart.get_chart() {
             let (covered, tag) = match type_chart.get_type() {
                 TypeCharts::Offense => (*multiplier > 1.0, type_chart.get_label()),
@@ -105,16 +126,27 @@ impl DisplayComponent<CoverageComponent<'_>> {
             };
 
             if covered {
-                let entry = coverage.entry(type_.clone());
-
-                if let Entry::Occupied(mut entry) = entry {
-                    let pokemon = format!(
-                        "{green}{pokemon_name}{green:#} ({tag})",
-                        green = self.ansi(Colors::Cyan)
-                    );
-                    entry.get_mut().push(pokemon);
-                }
+                covered_types.push((type_.clone(), tag))
             }
+        }
+        covered_types
+    }
+
+    fn add_to_coverage(
+        &self,
+        name: &str,
+        tag: &str,
+        type_: &str,
+        coverage: &mut HashMap<String, Vec<String>>,
+    ) {
+        let entry = coverage.entry(String::from(type_));
+
+        if let Entry::Occupied(mut entry) = entry {
+            let pokemon = format!(
+                "{green}{name}{green:#} ({tag})",
+                green = self.ansi(Colors::Cyan)
+            );
+            entry.get_mut().push(pokemon);
         }
     }
 }

@@ -99,7 +99,7 @@ impl Command for PokemonCommand {
         }
 
         if self.moves {
-            let moves = pokemon.get_move_data(&ctx.db)?;
+            let moves = pokemon.get_learnable_move_list(&ctx.db)?;
             let move_list_context = MoveListComponent {
                 move_list: &moves,
                 pokemon: &pokemon,

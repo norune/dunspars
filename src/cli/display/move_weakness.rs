@@ -25,7 +25,13 @@ impl fmt::Display for DisplayComponent<MoveWeaknessComponent<'_>> {
             stab_only,
         } = self.context;
 
-        let attacker_moves = attacker.get_move_data(db).unwrap();
+        let move_list = attacker.get_move_list(db).unwrap();
+        let attacker_moves = if move_list.is_empty() {
+            attacker.get_learnable_move_list(db).unwrap()
+        } else {
+            move_list
+        };
+
         let defender_defense = defender.get_defense_chart(db).unwrap();
 
         let weakness_groups = self.group_by_weakness(attacker_moves.get_list(), |move_| {
