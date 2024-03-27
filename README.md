@@ -23,7 +23,8 @@ dunspars pokemon clefairy --game emerald
 ```
 
 ### Match
-View match-up information such as stats and move weaknesses between 1-6 vs 1 Pokémon. The last Pokémon specified will be considered the attacker. 
+View match-up information such as stats and move weaknesses between 1-6 vs 1 Pokémon.\
+The last Pokémon specified will be considered the attacker. 
 ```
 dunspars match blaziken flygon goodra
 ```
@@ -54,11 +55,6 @@ View the effects of a Pokémon ability.
 dunspars ability intimidate
 ```
 
-### Custom Pokémon
-You can add custom Pokémon via a `custom.yaml` file in `~/.config/dunspars/`. 
-They can be referred by their nicknames and are integrated in the Coverage and Match subcommands.
-A template can be found in this project's `templates` folder.
-
 ### Help
 ```
 dunspars --help
@@ -67,6 +63,10 @@ For help within a subcommand, the `--help` option should still apply.
 ```
 dunspars pokemon --help
 ```
+### Custom Pokémon
+You can add custom Pokémon via a `custom.yaml` file in `~/.config/dunspars/`.\
+They can be referred by their nicknames and are integrated in the Coverage and Match subcommands.\
+A template can be found in this project's `templates` folder.
 
 ## Installation
 
