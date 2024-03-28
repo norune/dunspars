@@ -1,2 +1,3 @@
-game: scarlet-violet
-color: false
+config:
+  game: sword-shield
+  color: false

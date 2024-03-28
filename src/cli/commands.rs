@@ -4,9 +4,11 @@ use crate::api::game_to_gen;
 use crate::models::database::{
     AbilityRow, GameRow, MoveRow, PokemonRow, SelectAllNames, TypeRow, Validate,
 };
-use crate::models::{Ability, FromName, Move, Pokemon, Type};
-use crate::resource::config::{Config, ConfigFile};
+use crate::models::{Ability, FromName, FromNameCustom, Move, Pokemon, Type};
+use crate::resource::config::ConfigFile;
+use crate::resource::custom::{CustomCollection, CustomFile};
 use crate::resource::database::DatabaseFile;
+use crate::resource::{Config, YamlFile};
 
 use std::io::Write;
 
@@ -14,16 +16,17 @@ use anyhow::{anyhow, Result};
 use indoc::writedoc;
 use rusqlite::Connection;
 
-struct DbContext {
+struct AppContext {
     db: Connection,
+    custom: CustomCollection,
     config: Config,
 }
-impl DbContext {
+impl AppContext {
     fn try_new(config: Config) -> Result<Self> {
-        let file = DatabaseFile::default();
-        let db = file.connect()?;
+        let db = DatabaseFile::default().connect()?;
+        let custom = CustomFile::default().read()?;
 
-        Ok(Self { db, config })
+        Ok(Self { db, config, custom })
     }
 
     fn get_generation(&self) -> Result<u8> {
@@ -64,17 +67,17 @@ pub struct PokemonCommand {
 }
 impl Command for PokemonCommand {
     async fn run(&self, config: Config, writer: &mut impl Write) -> Result<i32> {
-        let ctx = DbContext::try_new(config)?;
-        let generation = ctx.get_generation()?;
+        let app = AppContext::try_new(config)?;
+        let generation = app.get_generation()?;
 
-        let pokemon = Pokemon::from_name(&self.name, generation, &ctx.db)?;
-        let pokemon_display = DisplayComponent::new(&pokemon, ctx.config.color_enabled);
+        let pokemon = Pokemon::from_name(&self.name, generation, &app.db, &app.custom)?;
+        let pokemon_display = DisplayComponent::new(&pokemon, app.config.color_enabled);
 
-        let defense_chart = pokemon.get_defense_chart(&ctx.db)?;
+        let defense_chart = pokemon.get_defense_chart(&app.db)?;
         let defense_chart_ctx = TypeChartComponent {
             type_chart: &defense_chart,
         };
-        let type_chart_display = DisplayComponent::new(defense_chart_ctx, ctx.config.color_enabled);
+        let type_chart_display = DisplayComponent::new(defense_chart_ctx, app.config.color_enabled);
 
         writedoc! {
             writer,
@@ -86,9 +89,9 @@ impl Command for PokemonCommand {
         }?;
 
         if self.evolution {
-            let evolution_step = pokemon.get_evolution_steps(&ctx.db)?;
+            let evolution_step = pokemon.get_evolution_steps(&app.db)?;
             let evolution_step_display =
-                DisplayComponent::new(&evolution_step, ctx.config.color_enabled);
+                DisplayComponent::new(&evolution_step, app.config.color_enabled);
             writedoc! {
                 writer,
                 "
@@ -99,13 +102,13 @@ impl Command for PokemonCommand {
         }
 
         if self.moves {
-            let moves = pokemon.get_learnable_move_list(&ctx.db)?;
+            let moves = pokemon.get_learnable_move_list(&app.db)?;
             let move_list_context = MoveListComponent {
                 move_list: &moves,
                 pokemon: &pokemon,
             };
             let move_list_display =
-                DisplayComponent::new(move_list_context, ctx.config.color_enabled);
+                DisplayComponent::new(move_list_context, app.config.color_enabled);
 
             writedoc! {
                 writer,
@@ -126,20 +129,20 @@ pub struct TypeCommand {
 }
 impl Command for TypeCommand {
     async fn run(&self, config: Config, writer: &mut impl Write) -> Result<i32> {
-        let ctx = DbContext::try_new(config)?;
-        let generation = ctx.get_generation()?;
+        let app = AppContext::try_new(config)?;
+        let generation = app.get_generation()?;
 
-        let primary_type = Type::from_name(&self.primary_type, generation, &ctx.db)?;
+        let primary_type = Type::from_name(&self.primary_type, generation, &app.db)?;
         let primary_offense_ctx = TypeChartComponent {
             type_chart: &primary_type.offense_chart,
         };
         let primary_offense_display =
-            DisplayComponent::new(primary_offense_ctx, ctx.config.color_enabled);
+            DisplayComponent::new(primary_offense_ctx, app.config.color_enabled);
 
         let secondary_type = self
             .secondary_type
             .as_ref()
-            .map(|t| Type::from_name(t, generation, &ctx.db));
+            .map(|t| Type::from_name(t, generation, &app.db));
 
         match secondary_type {
             Some(secondary_type) => {
@@ -148,13 +151,13 @@ impl Command for TypeCommand {
                     type_chart: &secondary_type.offense_chart,
                 };
                 let secondary_offense_display =
-                    DisplayComponent::new(secondary_offense_ctx, ctx.config.color_enabled);
+                    DisplayComponent::new(secondary_offense_ctx, app.config.color_enabled);
 
                 let combined_defense = primary_type.defense_chart + secondary_type.defense_chart;
                 let defense_ctx = TypeChartComponent {
                     type_chart: &combined_defense,
                 };
-                let defense_display = DisplayComponent::new(defense_ctx, ctx.config.color_enabled);
+                let defense_display = DisplayComponent::new(defense_ctx, app.config.color_enabled);
 
                 writedoc! {
                     writer,
@@ -171,7 +174,7 @@ impl Command for TypeCommand {
                 let defense_ctx = TypeChartComponent {
                     type_chart: &primary_type.defense_chart,
                 };
-                let defense_display = DisplayComponent::new(defense_ctx, ctx.config.color_enabled);
+                let defense_display = DisplayComponent::new(defense_ctx, app.config.color_enabled);
 
                 writedoc! {
                     writer,
@@ -193,11 +196,11 @@ pub struct MoveCommand {
 }
 impl Command for MoveCommand {
     async fn run(&self, config: Config, writer: &mut impl Write) -> Result<i32> {
-        let ctx = DbContext::try_new(config)?;
-        let generation = ctx.get_generation()?;
+        let app = AppContext::try_new(config)?;
+        let generation = app.get_generation()?;
 
-        let move_ = Move::from_name(&self.name, generation, &ctx.db)?;
-        let move_display = DisplayComponent::new(&move_, ctx.config.color_enabled);
+        let move_ = Move::from_name(&self.name, generation, &app.db)?;
+        let move_display = DisplayComponent::new(&move_, app.config.color_enabled);
 
         writedoc! {
             writer,
@@ -215,11 +218,11 @@ pub struct AbilityCommand {
 }
 impl Command for AbilityCommand {
     async fn run(&self, config: Config, writer: &mut impl Write) -> Result<i32> {
-        let ctx = DbContext::try_new(config)?;
-        let generation = ctx.get_generation()?;
+        let app = AppContext::try_new(config)?;
+        let generation = app.get_generation()?;
 
-        let ability = Ability::from_name(&self.name, generation, &ctx.db)?;
-        let ability_display = DisplayComponent::new(&ability, ctx.config.color_enabled);
+        let ability = Ability::from_name(&self.name, generation, &app.db)?;
+        let ability_display = DisplayComponent::new(&ability, app.config.color_enabled);
 
         writedoc! {
             writer,
@@ -241,15 +244,15 @@ pub struct MatchCommand {
 }
 impl Command for MatchCommand {
     async fn run(&self, config: Config, writer: &mut impl Write) -> Result<i32> {
-        let ctx = DbContext::try_new(config)?;
-        let generation = ctx.get_generation()?;
+        let app = AppContext::try_new(config)?;
+        let generation = app.get_generation()?;
 
-        let attacker = Pokemon::from_name(&self.attacker_name, generation, &ctx.db)?;
+        let attacker = Pokemon::from_name(&self.attacker_name, generation, &app.db, &app.custom)?;
 
         let mut defenders = vec![];
 
         for defender_name in self.defender_names.iter() {
-            let defender = Pokemon::from_name(defender_name, generation, &ctx.db)?;
+            let defender = Pokemon::from_name(defender_name, generation, &app.db, &app.custom)?;
 
             defenders.push(defender);
         }
@@ -258,11 +261,11 @@ impl Command for MatchCommand {
             let match_context = MatchComponent {
                 defender: &defender,
                 attacker: &attacker,
-                db: &ctx.db,
+                db: &app.db,
                 verbose: self.verbose,
                 stab_only: self.stab_only,
             };
-            let match_display = DisplayComponent::new(match_context, ctx.config.color_enabled);
+            let match_display = DisplayComponent::new(match_context, app.config.color_enabled);
 
             writedoc! {
                 writer,
@@ -283,20 +286,20 @@ pub struct CoverageCommand {
 }
 impl Command for CoverageCommand {
     async fn run(&self, config: Config, writer: &mut impl Write) -> Result<i32> {
-        let ctx = DbContext::try_new(config)?;
-        let generation = ctx.get_generation()?;
+        let app = AppContext::try_new(config)?;
+        let generation = app.get_generation()?;
 
         let mut pokemon = vec![];
         for name in self.names.iter() {
-            let mon = Pokemon::from_name(name, generation, &ctx.db)?;
+            let mon = Pokemon::from_name(name, generation, &app.db, &app.custom)?;
             pokemon.push(mon);
         }
 
         let coverage_ctx = CoverageComponent {
             pokemon: &pokemon,
-            db: &ctx.db,
+            db: &app.db,
         };
-        let coverage_display = DisplayComponent::new(coverage_ctx, ctx.config.color_enabled);
+        let coverage_display = DisplayComponent::new(coverage_ctx, app.config.color_enabled);
 
         writedoc! {
             writer,
@@ -315,15 +318,15 @@ pub struct ResourceCommand {
 }
 impl Command for ResourceCommand {
     async fn run(&self, config: Config, writer: &mut impl Write) -> Result<i32> {
-        let ctx = DbContext::try_new(config)?;
+        let app = AppContext::try_new(config)?;
         let delimiter = self.delimiter.clone().unwrap_or("\n".to_string());
 
         let resource = match self.resource {
-            ResourceArgs::Pokemon => PokemonRow::select_all_names(&ctx.db)?.join(&delimiter),
-            ResourceArgs::Moves => MoveRow::select_all_names(&ctx.db)?.join(&delimiter),
-            ResourceArgs::Abilities => AbilityRow::select_all_names(&ctx.db)?.join(&delimiter),
-            ResourceArgs::Types => TypeRow::select_all_names(&ctx.db)?.join(&delimiter),
-            ResourceArgs::Games => GameRow::select_all_names(&ctx.db)?.join(&delimiter),
+            ResourceArgs::Pokemon => PokemonRow::select_all_names(&app.db)?.join(&delimiter),
+            ResourceArgs::Moves => MoveRow::select_all_names(&app.db)?.join(&delimiter),
+            ResourceArgs::Abilities => AbilityRow::select_all_names(&app.db)?.join(&delimiter),
+            ResourceArgs::Types => TypeRow::select_all_names(&app.db)?.join(&delimiter),
+            ResourceArgs::Games => GameRow::select_all_names(&app.db)?.join(&delimiter),
         };
 
         writedoc! {
@@ -338,24 +341,33 @@ impl Command for ResourceCommand {
 }
 
 pub struct ConfigCommand {
-    pub key: String,
+    pub key: Option<String>,
     pub value: Option<String>,
     pub unset: bool,
 }
 impl Command for ConfigCommand {
     async fn run(&self, _config: Config, writer: &mut impl Write) -> Result<i32> {
-        let mut config_file = ConfigFile::from_file()?;
-        if self.unset {
-            config_file.unset_value(&self.key);
-            config_file.save()?;
-        } else if let Some(value) = &self.value {
-            config_file.set_value(&self.key, value);
-            config_file.save()?;
-        } else if self.value.is_none() {
-            if let Some(value) = config_file.get_value(&self.key) {
-                writeln!(writer, "{value}")?;
+        let config_file = ConfigFile::default();
+        let mut config = config_file.read()?;
+
+        if let Some(key) = &self.key {
+            if self.unset {
+                config.unset_value(key);
+                config_file.save(config)?;
+            } else if let Some(value) = &self.value {
+                config.set_value(key, value);
+                config_file.save(config)?;
+            } else if self.value.is_none() {
+                if let Some(value) = config.get_value(key) {
+                    writeln!(writer, "{value}")?;
+                }
+            }
+        } else {
+            for (key, value) in config.get_collection() {
+                writeln!(writer, "{key}: {value}")?;
             }
         }
+
         Ok(0)
     }
 }
@@ -363,7 +375,7 @@ impl Command for ConfigCommand {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::resource::config::ConfigBuilder;
+    use crate::resource::ConfigBuilder;
 
     fn config(game: &str) -> Config {
         ConfigBuilder::default()

@@ -17,21 +17,27 @@ pub use move_weakness::MoveWeaknessComponent;
 pub use typechart::TypeChartComponent;
 use weakness::WeaknessDisplay;
 
+use super::utils::is_color_enabled;
+
 pub struct DisplayComponent<T> {
     context: T,
-    color_enabled: bool,
+    color_enabled: Option<bool>,
 }
 
 impl<T> DisplayComponent<T> {
-    pub fn new(context: T, color_enabled: bool) -> Self {
+    pub fn new(context: T, color_enabled: Option<bool>) -> Self {
         Self {
             context,
             color_enabled,
         }
     }
 
+    fn is_color_enabled(&self) -> bool {
+        self.color_enabled.unwrap_or(is_color_enabled())
+    }
+
     fn style(&self) -> Style {
-        Style::new(self.color_enabled)
+        Style::new(self.is_color_enabled())
     }
 
     fn ansi(&self, color: Colors) -> anstyle::Style {

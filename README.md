@@ -64,7 +64,7 @@ A template of supported values can be found in this project's `templates` folder
 
 ### Custom Pokémon
 You can add custom Pokémon via a `custom.yaml` file in your local config directory; typically `~/.config/dunspars/` in Linux.\
-They can be invoked via their nicknames in subcommands that accept Pokémon as input.\
+They can be invoked via their nicknames in subcommands that accept Pokémon as input.
 ```
 dunspars coverage crawford ramza
 ```

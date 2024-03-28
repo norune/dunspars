@@ -18,12 +18,11 @@ use semver::Version;
 pub struct DatabaseFile {
     path: PathBuf,
 }
-impl Default for DatabaseFile {
-    fn default() -> Self {
-        Self { path: Self::path() }
-    }
-}
 impl DatabaseFile {
+    pub fn new(path: PathBuf) -> Self {
+        Self { path }
+    }
+
     pub fn connect(&self) -> Result<Connection> {
         let mut flags = OpenFlags::default();
         flags.set(OpenFlags::SQLITE_OPEN_READ_WRITE, false);
@@ -57,7 +56,7 @@ impl DatabaseFile {
     }
 
     pub async fn build_db(&self, writer: &mut impl std::io::Write) -> Result<()> {
-        Self::build_dir()?;
+        self.build_dir()?;
         if Self::path_exists(&self.path) {
             fs::remove_file(&self.path)?;
         }
@@ -138,8 +137,13 @@ impl DatabaseFile {
     }
 }
 impl AppFile for DatabaseFile {
-    fn path() -> PathBuf {
-        app_data_directory("resource.db")
+    fn path(&self) -> &PathBuf {
+        &self.path
+    }
+}
+impl Default for DatabaseFile {
+    fn default() -> Self {
+        Self::new(app_data_directory("resource.db"))
     }
 }
 

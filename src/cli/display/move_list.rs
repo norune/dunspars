@@ -83,7 +83,9 @@ impl fmt::Display for DisplayComponent<MoveListComponent<'_>> {
                 blue = self.ansi(Colors::Blue),
             );
 
-            let (name_space, type_space, stats_space) = if self.color_enabled {
+            // std::fmt's formatting widths are affected by ansi codes in the string.
+            // It's hacky, but having different width values based on the color setting is a suitable fix for now.
+            let (name_width, type_width, stats_width) = if self.is_color_enabled() {
                 (35, 20, 80)
             } else {
                 (21, 20, 37)
@@ -91,7 +93,7 @@ impl fmt::Display for DisplayComponent<MoveListComponent<'_>> {
 
             writedoc! {
                 f,
-                "\n{move_name:name_space$}{move_type:type_space$}{move_stats:stats_space$}{learn_method} {level}",
+                "\n{move_name:name_width$}{move_type:type_width$}{move_stats:stats_width$}{learn_method} {level}",
             }?;
         }
 

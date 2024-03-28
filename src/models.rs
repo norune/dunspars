@@ -29,6 +29,15 @@ pub trait FromName<T: SelectAllNames>: FromDb {
     }
 }
 
+pub trait FromNameCustom<T: SelectAllNames>: FromDb {
+    fn from_name(
+        name: &str,
+        generation: u8,
+        db: &Connection,
+        custom: &CustomCollection,
+    ) -> Result<Self>;
+}
+
 #[derive(Debug)]
 pub struct Pokemon {
     pub name: String,
@@ -81,9 +90,13 @@ impl FromDb for Pokemon {
         Pokemon::from_row(pokemon_row, generation, db)
     }
 }
-impl FromName<PokemonRow> for Pokemon {
-    fn from_name(name: &str, generation: u8, db: &Connection) -> Result<Self> {
-        let custom = CustomCollection::from_file()?;
+impl FromNameCustom<PokemonRow> for Pokemon {
+    fn from_name(
+        name: &str,
+        generation: u8,
+        db: &Connection,
+        custom: &CustomCollection,
+    ) -> Result<Self> {
         if let Some(custom_pokemon) = custom.find_pokemon(name) {
             Self::from_custom(custom_pokemon, db)
         } else {

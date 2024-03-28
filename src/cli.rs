@@ -2,7 +2,7 @@ mod commands;
 mod display;
 pub mod utils;
 
-use crate::resource::config::{Config, ConfigBuilder};
+use crate::resource::{Config, ConfigBuilder};
 use crate::VERSION;
 use commands::{
     AbilityCommand, Command, ConfigCommand, CoverageCommand, MatchCommand, MoveCommand,
@@ -91,13 +91,13 @@ enum Commands {
         #[arg(short, long)]
         delimiter: Option<String>,
     },
-    /// Program configuration
+    /// Dunspars configuration
     Config {
-        /// Name of the target configuration
-        key: String,
-        /// If provided, sets the target configuration to this value. If not, print its current value
+        /// Name of the target configuration. Prints all current config if empty
+        key: Option<String>,
+        /// Sets the target configuration to this value. Print its current value if empty
         value: Option<String>,
-        /// Unsets the target configuration
+        /// Deletes the target configuration
         #[arg(short, long, action = clap::ArgAction::SetTrue)]
         unset: bool,
     },
