@@ -1,5 +1,6 @@
 use super::{Colors, DisplayComponent};
-use crate::models::{FromDb, Pokemon, Type, TypeChart, TypeCharts, TYPES};
+use crate::cli::utils::is_stab;
+use crate::models::{FromDb, Move, Pokemon, Type, TypeChart, TypeCharts, TYPES};
 
 use std::collections::{hash_map::Entry, HashMap};
 use std::fmt;
@@ -79,57 +80,84 @@ impl DisplayComponent<CoverageComponent<'_>> {
             if move_list.is_empty() {
                 let primary_type =
                     Type::from_db(&pokemon.primary_type, pokemon.generation, db).unwrap();
-                self.add_type_coverage(
-                    &pokemon.nickname,
-                    &primary_type.offense_chart,
-                    &mut offense_coverage,
-                );
+                self.add_type_coverage(pokemon, &primary_type.offense_chart, &mut offense_coverage);
 
                 if let Some(secondary_type) = pokemon.secondary_type.as_ref() {
                     let secondary_type =
                         Type::from_db(secondary_type, pokemon.generation, db).unwrap();
                     self.add_type_coverage(
-                        &pokemon.nickname,
+                        pokemon,
                         &secondary_type.offense_chart,
                         &mut offense_coverage,
                     );
                 }
             } else {
-                // TODO
+                for move_ in move_list.get_list().values() {
+                    if move_.is_combat() {
+                        self.add_move_coverage(pokemon, move_, &mut offense_coverage);
+                    }
+                }
             }
 
             let defense_chart = pokemon.get_defense_chart(db).unwrap();
-            self.add_type_coverage(&pokemon.nickname, &defense_chart, &mut defense_coverage);
+            self.add_type_coverage(pokemon, &defense_chart, &mut defense_coverage);
         }
 
         (offense_coverage, defense_coverage)
     }
 
+    fn add_move_coverage(
+        &self,
+        pokemon: &Pokemon,
+        move_: &Move,
+        coverage: &mut HashMap<String, Vec<String>>,
+    ) {
+        let move_type = Type::from_db(&move_.type_, move_.generation, self.context.db).unwrap();
+        let covered_types = self.get_covered_types(&move_type.offense_chart);
+        for type_ in covered_types {
+            let mut tag = move_.name.clone();
+            if is_stab(&move_.type_, pokemon) {
+                tag += "+";
+            }
+            self.add_to_coverage(&pokemon.name, &tag, &type_, coverage);
+        }
+    }
+
     fn add_type_coverage(
         &self,
-        pokemon_name: &str,
+        pokemon: &Pokemon,
         type_chart: &impl TypeChart,
         coverage: &mut HashMap<String, Vec<String>>,
     ) {
         let covered_types = self.get_covered_types(type_chart);
-        for (type_, tag) in covered_types {
-            self.add_to_coverage(pokemon_name, &tag, &type_, coverage);
+        for type_ in covered_types {
+            let tag = match type_chart.get_type() {
+                TypeCharts::Offense => type_chart.get_label(),
+                TypeCharts::Defense => {
+                    let multiplier = type_chart.get_multiplier(&type_);
+                    multiplier.to_string()
+                }
+            };
+            self.add_to_coverage(&pokemon.name, &tag, &type_, coverage);
         }
     }
 
-    fn get_covered_types(&self, type_chart: &impl TypeChart) -> Vec<(String, String)> {
-        let mut covered_types = vec![];
-        for (type_, multiplier) in type_chart.get_chart() {
-            let (covered, tag) = match type_chart.get_type() {
-                TypeCharts::Offense => (*multiplier > 1.0, type_chart.get_label()),
-                TypeCharts::Defense => (*multiplier < 1.0, multiplier.to_string()),
-            };
-
-            if covered {
-                covered_types.push((type_.clone(), tag))
-            }
-        }
-        covered_types
+    fn get_covered_types(&self, type_chart: &impl TypeChart) -> Vec<String> {
+        type_chart
+            .get_chart()
+            .iter()
+            .filter_map(|(type_, multiplier)| {
+                let covered = match type_chart.get_type() {
+                    TypeCharts::Offense => *multiplier > 1.0,
+                    TypeCharts::Defense => *multiplier < 1.0,
+                };
+                if covered {
+                    Some(type_.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 
     fn add_to_coverage(

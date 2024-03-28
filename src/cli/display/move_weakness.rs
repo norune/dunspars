@@ -34,14 +34,14 @@ impl fmt::Display for DisplayComponent<MoveWeaknessComponent<'_>> {
 
         let defender_defense = defender.get_defense_chart(db).unwrap();
 
-        let weakness_groups = self.group_by_weakness(attacker_moves.get_list(), |move_| {
-            let multiplier = defender_defense.get_multiplier(&move_.1.type_);
+        let weakness_groups = self.group_by_weakness(attacker_moves.get_list().values(), |move_| {
+            let multiplier = defender_defense.get_multiplier(&move_.type_);
 
-            let stab_qualified = !stab_only || is_stab(&move_.1.type_, attacker);
+            let stab_qualified = !stab_only || is_stab(&move_.type_, attacker);
             let verbose_qualified = verbose || multiplier >= 2.0;
 
-            if move_.1.damage_class != "status" && stab_qualified && verbose_qualified {
-                Some((move_.1, multiplier))
+            if move_.is_combat() && stab_qualified && verbose_qualified {
+                Some((move_, multiplier))
             } else {
                 None
             }

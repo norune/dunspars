@@ -1,5 +1,5 @@
 use super::game_to_gen;
-use crate::models::resource::{
+use crate::models::database::{
     AbilityRow, GameRow, MoveChangeRow, MoveRow, PokemonAbilityRow, PokemonMoveRow, PokemonRow,
     PokemonTypeChangeRow, SpeciesRow, TypeChangeRow, TypeRow,
 };

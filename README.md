@@ -55,6 +55,21 @@ View the effects of a Pokémon ability.
 dunspars ability intimidate
 ```
 
+### Config
+View, set, or remove default settings.
+```
+dunspars config game sword-shield
+```
+A template of supported values can be found in this project's `templates` folder.
+
+### Custom Pokémon
+You can add custom Pokémon via a `custom.yaml` file in your local config directory; typically `~/.config/dunspars/` in Linux.\
+They can be invoked via their nicknames in subcommands that accept Pokémon as input.\
+```
+dunspars coverage crawford ramza
+```
+A template can be found in this project's `templates` folder.
+
 ### Help
 ```
 dunspars --help
@@ -63,10 +78,6 @@ For help within a subcommand, the `--help` option should still apply.
 ```
 dunspars pokemon --help
 ```
-### Custom Pokémon
-You can add custom Pokémon via a `custom.yaml` file in `~/.config/dunspars/`.\
-They can be referred by their nicknames and are integrated in the Coverage and Match subcommands.\
-A template can be found in this project's `templates` folder.
 
 ## Installation
 

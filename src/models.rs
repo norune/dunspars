@@ -1,10 +1,10 @@
-pub mod resource;
+pub mod database;
 
 use crate::resource::custom::{CustomCollection, CustomPokemon};
-use resource::{
+use database::{
     AbilityRow, EvolutionRow, FromRow, GameRow, MoveChangeRow, MoveRow, PokemonAbilityRow,
-    PokemonMoveRow, PokemonRow, PokemonTypeChangeRow, Resource, SelectAllNames, SelectChangeRow,
-    SelectRow, SpeciesRow, TypeChangeRow, TypeRow,
+    PokemonMoveRow, PokemonRow, PokemonTypeChangeRow, SelectAllNames, SelectChangeRow, SelectRow,
+    SpeciesRow, TypeChangeRow, TypeRow, Validate,
 };
 
 use std::collections::HashMap;
@@ -18,9 +18,13 @@ pub trait FromDb: Sized {
     fn from_db(name: &str, generation: u8, db: &Connection) -> Result<Self>;
 }
 
+pub trait FromCustom<T>: Sized {
+    fn from_custom(custom: &T, db: &Connection) -> Result<Self>;
+}
+
 pub trait FromName<T: SelectAllNames>: FromDb {
     fn from_name(name: &str, generation: u8, db: &Connection) -> Result<Self> {
-        let name = Resource::<T>::validate(db, name)?;
+        let name = Validate::<T>::validate(db, name)?;
         Self::from_db(&name, generation, db)
     }
 }
@@ -40,33 +44,6 @@ pub struct Pokemon {
     pub species: String,
 }
 impl Pokemon {
-    pub fn from_custom(custom: &CustomPokemon, db: &Connection) -> Result<Self> {
-        let pokemon_row = PokemonRow::select_by_name(&custom.base, db)?;
-        let db_pokemon = Pokemon::from_row(pokemon_row, custom.generation, db)?;
-
-        let mut primary_type = db_pokemon.primary_type;
-        let mut secondary_type = db_pokemon.secondary_type;
-
-        if let Some((primary, secondary)) = &custom.types {
-            primary_type = primary.clone();
-            secondary_type = secondary.clone();
-        }
-
-        Ok(Pokemon {
-            name: db_pokemon.name,
-            nickname: custom.nickname.clone(),
-            primary_type,
-            secondary_type,
-            learnable_moves: db_pokemon.learnable_moves,
-            moves: custom.moves.clone(),
-            group: db_pokemon.group,
-            generation: db_pokemon.generation,
-            stats: db_pokemon.stats,
-            abilities: db_pokemon.abilities,
-            species: db_pokemon.species,
-        })
-    }
-
     pub fn get_move_list(&self, db: &Connection) -> Result<MoveList> {
         MoveList::try_new(&self.moves, self.generation, db)
     }
@@ -110,9 +87,37 @@ impl FromName<PokemonRow> for Pokemon {
         if let Some(custom_pokemon) = custom.find_pokemon(name) {
             Self::from_custom(custom_pokemon, db)
         } else {
-            let name = Resource::<PokemonRow>::validate(db, name)?;
+            let name = Validate::<PokemonRow>::validate(db, name)?;
             Self::from_db(&name, generation, db)
         }
+    }
+}
+impl FromCustom<CustomPokemon> for Pokemon {
+    fn from_custom(custom: &CustomPokemon, db: &Connection) -> Result<Self> {
+        let pokemon_row = PokemonRow::select_by_name(&custom.base, db)?;
+        let db_pokemon = Pokemon::from_row(pokemon_row, custom.generation, db)?;
+
+        let mut primary_type = db_pokemon.primary_type;
+        let mut secondary_type = db_pokemon.secondary_type;
+
+        if let Some((primary, secondary)) = &custom.types {
+            primary_type = primary.clone();
+            secondary_type = secondary.clone();
+        }
+
+        Ok(Pokemon {
+            name: db_pokemon.name,
+            nickname: custom.nickname.clone(),
+            primary_type,
+            secondary_type,
+            learnable_moves: db_pokemon.learnable_moves,
+            moves: custom.moves.clone(),
+            group: db_pokemon.group,
+            generation: db_pokemon.generation,
+            stats: db_pokemon.stats,
+            abilities: db_pokemon.abilities,
+            species: db_pokemon.species,
+        })
     }
 }
 impl FromRow<PokemonRow> for Pokemon {
@@ -459,6 +464,11 @@ pub struct Move {
     pub effect: String,
     pub effect_chance: Option<i64>,
     pub generation: u8,
+}
+impl Move {
+    pub fn is_combat(&self) -> bool {
+        self.damage_class != "status"
+    }
 }
 impl FromDb for Move {
     fn from_db(move_name: &str, generation: u8, db: &Connection) -> Result<Self> {

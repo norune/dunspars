@@ -7,6 +7,7 @@ pub trait FromRow<T>: Sized {
 
 pub trait TableRow {
     fn table() -> &'static str;
+    fn label() -> &'static str;
 }
 
 pub trait InsertRow {
@@ -58,8 +59,6 @@ pub trait SelectAllNames: TableRow {
 
         Ok(names)
     }
-
-    fn label() -> &'static str;
 }
 
 pub enum ResourceResult {
@@ -76,6 +75,9 @@ pub struct GameRow {
 impl TableRow for GameRow {
     fn table() -> &'static str {
         "games"
+    }
+    fn label() -> &'static str {
+        "Game"
     }
 }
 impl SelectRow for GameRow {
@@ -94,11 +96,7 @@ impl InsertRow for GameRow {
         statement.execute(params![self.id, self.name, self.order, self.generation])
     }
 }
-impl SelectAllNames for GameRow {
-    fn label() -> &'static str {
-        "Game"
-    }
-}
+impl SelectAllNames for GameRow {}
 
 pub struct MoveRow {
     pub id: i64,
@@ -115,6 +113,9 @@ pub struct MoveRow {
 impl TableRow for MoveRow {
     fn table() -> &'static str {
         "moves"
+    }
+    fn label() -> &'static str {
+        "Move"
     }
 }
 impl SelectRow for MoveRow {
@@ -150,11 +151,7 @@ impl InsertRow for MoveRow {
         ])
     }
 }
-impl SelectAllNames for MoveRow {
-    fn label() -> &'static str {
-        "Move"
-    }
-}
+impl SelectAllNames for MoveRow {}
 
 pub struct MoveChangeRow {
     pub id: Option<i64>,
@@ -170,6 +167,9 @@ pub struct MoveChangeRow {
 impl TableRow for MoveChangeRow {
     fn table() -> &'static str {
         "move_changes"
+    }
+    fn label() -> &'static str {
+        "Move Change"
     }
 }
 impl SelectChangeRow for MoveChangeRow {
@@ -236,6 +236,9 @@ impl TableRow for TypeRow {
     fn table() -> &'static str {
         "types"
     }
+    fn label() -> &'static str {
+        "Type"
+    }
 }
 impl SelectRow for TypeRow {
     fn on_hit(row: &Row<'_>) -> SqlResult<Self> {
@@ -268,11 +271,7 @@ impl InsertRow for TypeRow {
         ])
     }
 }
-impl SelectAllNames for TypeRow {
-    fn label() -> &'static str {
-        "Type"
-    }
-}
+impl SelectAllNames for TypeRow {}
 
 pub struct TypeChangeRow {
     pub id: Option<i64>,
@@ -288,6 +287,9 @@ pub struct TypeChangeRow {
 impl TableRow for TypeChangeRow {
     fn table() -> &'static str {
         "type_changes"
+    }
+    fn label() -> &'static str {
+        "Type Change"
     }
 }
 impl SelectChangeRow for TypeChangeRow {
@@ -349,6 +351,9 @@ impl TableRow for AbilityRow {
     fn table() -> &'static str {
         "abilities"
     }
+    fn label() -> &'static str {
+        "Ability"
+    }
 }
 impl SelectRow for AbilityRow {
     fn on_hit(row: &Row<'_>) -> SqlResult<Self> {
@@ -366,11 +371,7 @@ impl InsertRow for AbilityRow {
         statement.execute(params![self.id, self.name, self.effect, self.generation])
     }
 }
-impl SelectAllNames for AbilityRow {
-    fn label() -> &'static str {
-        "Ability"
-    }
-}
+impl SelectAllNames for AbilityRow {}
 
 pub struct EvolutionRow {
     pub id: i64,
@@ -379,6 +380,9 @@ pub struct EvolutionRow {
 impl TableRow for EvolutionRow {
     fn table() -> &'static str {
         "evolutions"
+    }
+    fn label() -> &'static str {
+        "Evolution"
     }
 }
 impl InsertRow for EvolutionRow {
@@ -407,6 +411,9 @@ pub struct SpeciesRow {
 impl TableRow for SpeciesRow {
     fn table() -> &'static str {
         "species"
+    }
+    fn label() -> &'static str {
+        "Species"
     }
 }
 impl InsertRow for SpeciesRow {
@@ -452,6 +459,9 @@ impl TableRow for PokemonRow {
     fn table() -> &'static str {
         "pokemon"
     }
+    fn label() -> &'static str {
+        "Pokémon"
+    }
 }
 impl InsertRow for PokemonRow {
     fn insert(&self, db: &Connection) -> SqlResult<usize> {
@@ -488,11 +498,7 @@ impl SelectRow for PokemonRow {
         })
     }
 }
-impl SelectAllNames for PokemonRow {
-    fn label() -> &'static str {
-        "Pokémon"
-    }
-}
+impl SelectAllNames for PokemonRow {}
 
 pub struct PokemonMoveRow {
     pub id: Option<i64>,
@@ -505,6 +511,9 @@ pub struct PokemonMoveRow {
 impl TableRow for PokemonMoveRow {
     fn table() -> &'static str {
         "pokemon_moves"
+    }
+    fn label() -> &'static str {
+        "Pokémon Move"
     }
 }
 impl InsertRow for PokemonMoveRow {
@@ -552,6 +561,9 @@ impl TableRow for PokemonAbilityRow {
     fn table() -> &'static str {
         "pokemon_abilities"
     }
+    fn label() -> &'static str {
+        "Pokémon Ability"
+    }
 }
 impl InsertRow for PokemonAbilityRow {
     fn insert(&self, db: &Connection) -> SqlResult<usize> {
@@ -590,6 +602,9 @@ pub struct PokemonTypeChangeRow {
 impl TableRow for PokemonTypeChangeRow {
     fn table() -> &'static str {
         "pokemon_type_changes"
+    }
+    fn label() -> &'static str {
+        "Pokémon Type Change"
     }
 }
 impl InsertRow for PokemonTypeChangeRow {
@@ -646,6 +661,9 @@ impl TableRow for MetaRow {
     fn table() -> &'static str {
         "meta"
     }
+    fn label() -> &'static str {
+        "Meta"
+    }
 }
 impl InsertRow for MetaRow {
     fn insert(&self, db: &Connection) -> SqlResult<usize> {
@@ -662,7 +680,7 @@ impl SelectRow for MetaRow {
     }
 }
 
-pub trait Resource<T> {
+pub trait Validate<T> {
     fn validate(&self, value: &str) -> Result<String> {
         let value = value.to_lowercase();
         match self.check(&value) {
@@ -681,7 +699,7 @@ pub trait Resource<T> {
     }
 
     fn get_matches(&self, value: &str) -> Vec<String> {
-        self.resource()
+        self.get_resource()
             .iter()
             .filter_map(|r| {
                 let close_enough = if !r.is_empty() && !value.is_empty() {
@@ -716,16 +734,77 @@ pub trait Resource<T> {
         message
     }
 
-    fn resource(&self) -> Vec<String>;
+    fn get_resource(&self) -> Vec<String>;
     fn label() -> &'static str;
 }
 
-impl<T: SelectAllNames> Resource<T> for Connection {
-    fn resource(&self) -> Vec<String> {
+impl<T: SelectAllNames> Validate<T> for Connection {
+    fn get_resource(&self) -> Vec<String> {
         T::select_all_names(self).unwrap()
     }
 
     fn label() -> &'static str {
         T::label()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct MockRow;
+    impl TableRow for MockRow {
+        fn table() -> &'static str {
+            "mock_row"
+        }
+        fn label() -> &'static str {
+            "Row"
+        }
+    }
+    impl SelectAllNames for MockRow {}
+
+    struct MockResource;
+    impl Validate<MockRow> for MockResource {
+        fn get_resource(&self) -> Vec<String> {
+            vec!["orangutan", "cricket", "ocelot", "toucan", "wendigo"]
+                .into_iter()
+                .map(String::from)
+                .collect()
+        }
+
+        fn label() -> &'static str {
+            MockRow::label()
+        }
+    }
+
+    #[test]
+    fn resource_validates() {
+        let resource = MockResource;
+
+        let err = resource
+            .validate("osselot")
+            .expect_err("ocelot should only be a potential match via levenshtein distance");
+        assert_eq!(
+            String::from("Row 'osselot' not found. Potential matches: ocelot."),
+            err.to_string()
+        );
+
+        let err = resource
+            .validate("toucannon")
+            .expect_err("toucannon should only be a potential match via substring");
+        assert_eq!(
+            String::from("Row 'toucannon' not found. Potential matches: toucan."),
+            err.to_string()
+        );
+
+        let ok = resource
+            .validate("cricket")
+            .expect("cricket should be a valid");
+        assert_eq!(String::from("cricket"), ok);
+
+        let ok = resource
+            .validate("Wendigo")
+            .expect("Wendigo should be valid; validate is case-insensitive");
+        assert_eq!(String::from("wendigo"), ok);
     }
 }

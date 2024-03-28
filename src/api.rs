@@ -1,6 +1,6 @@
 mod convert;
 
-use crate::models::resource::{
+use crate::models::database::{
     AbilityRow, EvolutionRow, GameRow, InsertRow, MoveChangeRow, MoveRow, MoveRowGroup,
     PokemonAbilityRow, PokemonMoveRow, PokemonRow, PokemonRowGroup, PokemonTypeChangeRow,
     SelectRow, SpeciesRow, TypeChangeRow, TypeRow, TypeRowGroup,

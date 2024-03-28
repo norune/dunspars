@@ -133,7 +133,8 @@ pub async fn run() -> Result<i32> {
 async fn run_command(commands: Commands, config: Config) -> Result<i32> {
     let mut output = stdout().lock();
 
-    // Performing dynamic dispatch here, i.e. dyn Command.run(), doesn't work.
+    // Performing dynamic dispatch with async functions may produce
+    // obscure error messages which make it hard to debug.
     // Related issues:
     // https://github.com/rust-lang/rust/issues/119502
     // https://github.com/rust-lang/rust/issues/78649

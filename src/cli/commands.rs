@@ -1,8 +1,8 @@
 use super::display::*;
 use super::ResourceArgs;
 use crate::api::game_to_gen;
-use crate::models::resource::{
-    AbilityRow, GameRow, MoveRow, PokemonRow, Resource, SelectAllNames, TypeRow,
+use crate::models::database::{
+    AbilityRow, GameRow, MoveRow, PokemonRow, SelectAllNames, TypeRow, Validate,
 };
 use crate::models::{Ability, FromName, Move, Pokemon, Type};
 use crate::resource::config::{Config, ConfigFile};
@@ -28,7 +28,7 @@ impl DbContext {
 
     fn get_generation(&self) -> Result<u8> {
         let game = match &self.config.game {
-            Some(game) => Resource::<GameRow>::validate(&self.db, game)?,
+            Some(game) => Validate::<GameRow>::validate(&self.db, game)?,
             None => self
                 .get_latest_game()
                 .ok_or(anyhow!("Cannot find the latest game"))?,

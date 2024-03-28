@@ -4,7 +4,7 @@ use crate::api::{
     AbilityFetcher, EvolutionFetcher, FetchResource, GameFetcher, MoveFetcher, PokemonFetcher,
     SpeciesFetcher, TypeFetcher,
 };
-use crate::models::resource::{InsertRow, MetaRow, SelectRow};
+use crate::models::database::{InsertRow, MetaRow, SelectRow};
 use crate::VERSION;
 
 use std::fs;
