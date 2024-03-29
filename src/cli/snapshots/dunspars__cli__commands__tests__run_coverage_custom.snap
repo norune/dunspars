@@ -1,0 +1,43 @@
+---
+source: src/cli/commands.rs
+description: coverage crawford ramza --game the-indigo-disk
+---
+offense coverage
+bug: cramorant (drill-peck+) dudunsparce (flamethrower)
+dark
+dragon
+electric: dudunsparce (drill-run)
+fairy
+fighting: cramorant (drill-peck+)
+fire: cramorant (surf+) dudunsparce (drill-run)
+flying
+ghost
+grass: cramorant (drill-peck+) dudunsparce (flamethrower)
+ground: cramorant (surf+)
+ice: dudunsparce (flamethrower)
+normal
+poison: dudunsparce (drill-run)
+psychic
+rock: cramorant (surf+) dudunsparce (drill-run)
+steel: dudunsparce (drill-run)
+water
+
+defense coverage
+bug: cramorant (0.5)
+dark
+dragon
+electric: dudunsparce (0.5)
+fairy
+fighting: cramorant (0.5)
+fire: cramorant (0.5)
+flying
+ghost
+grass: dudunsparce (0.5)
+ground: cramorant (0) dudunsparce (0.5)
+ice
+normal
+poison
+psychic
+rock
+steel: cramorant (0.5)
+water: cramorant (0.5) dudunsparce (0.5)

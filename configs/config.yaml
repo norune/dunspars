@@ -1,3 +1,5 @@
 config:
   color: 'false'
   game: sword-shield
+  db_path: /path/to/resource.db
+  custom_path: /path/to/custom.yaml

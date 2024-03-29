@@ -1,0 +1,14 @@
+---
+source: src/cli/commands.rs
+description: pokemon ramza
+---
+ramza (dudunsparce) grass 
+serene-grace run-away rattled(h)
+hp    atk   def   satk  sdef  spd   total
+125   100   80    85    75    55    520   
+gen-9
+
+grass defense
+double: bug fire flying ice poison
+neutral: dark dragon fairy fighting ghost normal psychic rock steel
+half: electric grass ground water

@@ -7,14 +7,14 @@ pokemon:
       - surf
       - stockpile
       - drill-peck
-    types:
-      - rock
-      - null
   - nickname: ramza
     base: dudunsparce
     generation: 9
     moves:
       - calm-mind
       - flamethrower
-      - tera-blast
+      - drill-run
       - boomburst
+    types:
+      - grass
+      - null

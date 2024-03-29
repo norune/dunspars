@@ -392,13 +392,18 @@ impl Command for ConfigCommand {
 mod tests {
     use super::*;
     use crate::resource::ConfigBuilder;
+    use std::env::current_dir;
 
     fn config(game: &str) -> Config {
+        let mut custom_path = current_dir().expect("the current directory should be accessible");
+        custom_path.push("configs/custom.yaml");
+
         ConfigBuilder::default()
             .game(String::from(game))
             .color_enabled(false)
+            .custom_path(custom_path)
             .build()
-            .unwrap()
+            .expect("the ConfigBuilder for commands.rs tests should succeed")
     }
 
     async fn run_command(command: impl Command, config: Config) -> String {
@@ -423,6 +428,24 @@ mod tests {
             omit_expression => true
         }, {
             insta::assert_snapshot!(output);
+        });
+    }
+
+    #[tokio::test]
+    async fn run_pokemon_custom() {
+        let config = config("scarlet-violet");
+        let ramza = PokemonCommand {
+            name: String::from("ramza"),
+            moves: false,
+            evolution: false,
+        };
+        let ramza_output = run_command(ramza, config.clone()).await;
+
+        insta::with_settings!({
+            description => "pokemon ramza",
+            omit_expression => true
+        }, {
+            insta::assert_snapshot!(ramza_output);
         });
     }
 
@@ -597,6 +620,25 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn run_match_custom() {
+        let config = config("the-indigo-disk");
+        let custom_cmd = MatchCommand {
+            defender_names: vec![String::from("ramza")],
+            attacker_name: String::from("crawford"),
+            verbose: true,
+            stab_only: false,
+        };
+        let custom = run_command(custom_cmd, config.clone()).await;
+
+        insta::with_settings!({
+            description => "match ramza crawford --verbose --game the-indigo-disk",
+            omit_expression => true
+        }, {
+            insta::assert_snapshot!(custom);
+        });
+    }
+
+    #[tokio::test]
     async fn run_coverage() {
         let config = config("the-indigo-disk");
         let coverage = CoverageCommand {
@@ -614,6 +656,23 @@ mod tests {
 
         insta::with_settings!({
             description => "coverage flamigo cramorant ribombee ogerpon-cornerstone-mask dudunsparce sinistcha --game the-indigo-disk",
+            omit_expression => true
+        }, {
+            insta::assert_snapshot!(output);
+        });
+    }
+
+    #[tokio::test]
+    async fn run_coverage_custom() {
+        let config = config("the-indigo-disk");
+        let coverage = CoverageCommand {
+            names: vec![String::from("crawford"), String::from("ramza")],
+        };
+
+        let output = run_command(coverage, config).await;
+
+        insta::with_settings!({
+            description => "coverage crawford ramza --game the-indigo-disk",
             omit_expression => true
         }, {
             insta::assert_snapshot!(output);
