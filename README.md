@@ -60,7 +60,7 @@ View, set, or remove default settings.
 ```
 dunspars config game sword-shield
 ```
-A template of supported values can be found in this project's `templates` folder.
+A template of supported values can be found in this project's `configs` folder.
 
 ### Custom Pokémon
 You can add custom Pokémon via a `custom.yaml` file in your local config directory; typically `~/.config/dunspars/` in Linux.\
@@ -68,7 +68,7 @@ They can be invoked via their nicknames in subcommands that accept Pokémon as i
 ```
 dunspars coverage crawford ramza
 ```
-A template can be found in this project's `templates` folder.
+A template can be found in this project's `configs` folder.
 
 ### Help
 ```

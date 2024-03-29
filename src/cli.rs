@@ -10,6 +10,7 @@ use commands::{
 };
 
 use std::io::stdout;
+use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -20,7 +21,7 @@ struct Cli {
     #[command(subcommand)]
     command: Commands,
     /// Sets the mainline Pokémon game the output will be based on
-    #[clap(short, long, global = true)]
+    #[clap(long, global = true)]
     game: Option<String>,
     /// Force output to include colors
     #[clap(long, action = clap::ArgAction::SetTrue, global = true)]
@@ -28,6 +29,15 @@ struct Cli {
     /// Force output to exclude colors
     #[clap(long, action = clap::ArgAction::SetTrue, global = true)]
     no_color: bool,
+    /// Sets a specific file as the program's config path
+    #[clap(long, global = true)]
+    config: Option<PathBuf>,
+    /// Sets a specific file as the program's database path
+    #[clap(long, global = true)]
+    database: Option<PathBuf>,
+    /// Sets a specific file as the program's custom resources path
+    #[clap(long, global = true)]
+    custom: Option<PathBuf>,
 }
 
 #[derive(Subcommand)]
@@ -114,18 +124,26 @@ enum ResourceArgs {
 
 pub async fn run() -> Result<i32> {
     let cli = Cli::parse();
+    let mut builder = ConfigBuilder::from_file(cli.config)?;
 
-    let mut config_builder = ConfigBuilder::from_file()?;
     if let Some(game) = &cli.game {
-        config_builder = config_builder.game(game.to_owned());
+        builder = builder.game(game.to_owned());
     }
-    if cli.color {
-        config_builder = config_builder.color_enabled(true);
-    } else if cli.no_color {
-        config_builder = config_builder.color_enabled(false);
-    }
-    let config = config_builder.build()?;
 
+    if cli.color {
+        builder = builder.color_enabled(true);
+    } else if cli.no_color {
+        builder = builder.color_enabled(false);
+    }
+
+    if let Some(path) = cli.database {
+        builder = builder.db_path(path);
+    }
+    if let Some(path) = cli.custom {
+        builder = builder.custom_path(path);
+    }
+
+    let config = builder.build()?;
     let status_code = run_command(cli.command, config).await?;
     Ok(status_code)
 }

@@ -6,6 +6,7 @@ use config::ConfigFile;
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use anyhow::Result;
 
@@ -87,19 +88,42 @@ pub trait YamlFile: AppFile {
 pub struct ConfigBuilder {
     game: Option<String>,
     color_enabled: Option<bool>,
+    config_path: Option<PathBuf>,
+    db_path: Option<PathBuf>,
+    custom_path: Option<PathBuf>,
 }
 impl ConfigBuilder {
-    pub fn from_file() -> Result<Self> {
-        let config_collection = ConfigFile::default().read()?;
+    pub fn from_file(path: Option<PathBuf>) -> Result<Self> {
         let mut builder = ConfigBuilder::default();
 
-        if let Some(color) = config_collection.get_value("color") {
+        let config_file = if let Some(path) = path {
+            builder = builder.config_path(path.clone());
+            ConfigFile::new(path)
+        } else {
+            ConfigFile::default()
+        };
+        let config = config_file.read()?;
+
+        if let Some(color) = config.get_value("color") {
             if let Ok(color) = color.parse::<bool>() {
                 builder = builder.color_enabled(color);
             }
         }
-        if let Some(game) = config_collection.get_value("game") {
+
+        if let Some(game) = config.get_value("game") {
             builder = builder.game(String::from(game));
+        }
+
+        if let Some(db_path) = config.get_value("db_path") {
+            if let Ok(path) = PathBuf::from_str(db_path) {
+                builder = builder.db_path(path);
+            }
+        }
+
+        if let Some(custom_path) = config.get_value("custom_path") {
+            if let Ok(path) = PathBuf::from_str(custom_path) {
+                builder = builder.custom_path(path);
+            }
         }
 
         Ok(builder)
@@ -116,10 +140,28 @@ impl ConfigBuilder {
         self
     }
 
+    pub fn config_path(mut self, path: PathBuf) -> Self {
+        self.config_path = Some(path);
+        self
+    }
+
+    pub fn db_path(mut self, path: PathBuf) -> Self {
+        self.db_path = Some(path);
+        self
+    }
+
+    pub fn custom_path(mut self, path: PathBuf) -> Self {
+        self.custom_path = Some(path);
+        self
+    }
+
     pub fn build(self) -> Result<Config> {
         Ok(Config {
             game: self.game,
             color_enabled: self.color_enabled,
+            config_path: self.config_path,
+            db_path: self.db_path,
+            custom_path: self.custom_path,
         })
     }
 }
@@ -128,4 +170,7 @@ impl ConfigBuilder {
 pub struct Config {
     pub game: Option<String>,
     pub color_enabled: Option<bool>,
+    pub config_path: Option<PathBuf>,
+    pub db_path: Option<PathBuf>,
+    pub custom_path: Option<PathBuf>,
 }

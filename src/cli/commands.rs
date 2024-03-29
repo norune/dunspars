@@ -23,8 +23,19 @@ struct AppContext {
 }
 impl AppContext {
     fn try_new(config: Config) -> Result<Self> {
-        let db = DatabaseFile::default().connect()?;
-        let custom = CustomFile::default().read()?;
+        let db_file = if let Some(path) = &config.db_path {
+            DatabaseFile::new(path.clone())
+        } else {
+            DatabaseFile::default()
+        };
+        let db = db_file.connect()?;
+
+        let custom_file = if let Some(path) = &config.custom_path {
+            CustomFile::new(path.clone())
+        } else {
+            CustomFile::default()
+        };
+        let custom = custom_file.read()?;
 
         Ok(Self { db, config, custom })
     }
@@ -346,8 +357,13 @@ pub struct ConfigCommand {
     pub unset: bool,
 }
 impl Command for ConfigCommand {
-    async fn run(&self, _config: Config, writer: &mut impl Write) -> Result<i32> {
-        let config_file = ConfigFile::default();
+    async fn run(&self, config: Config, writer: &mut impl Write) -> Result<i32> {
+        let config_file = if let Some(path) = config.config_path {
+            ConfigFile::new(path)
+        } else {
+            ConfigFile::default()
+        };
+
         let mut config = config_file.read()?;
 
         if let Some(key) = &self.key {
